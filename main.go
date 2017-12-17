@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/go-telegram-bot-api/telegram-bot-api"
 )
@@ -80,18 +81,13 @@ func proceedMessage(chatId int64, messageFromUser string) {
 				return
 			}
 
-			//fmt.Println(currentStorySubject)
+			proceedPrompt(messageFromUser, lastStorySubject, &sess)
 
 			sess = sessionSet(chatId, userSession{ //TODO передача по ссылке, передаем только изменяемый параметр
 				Position: userAnswers[messageFromUser],
 				Lock:     true,
 				Stuff:    sess.Stuff,
 			})
-
-			//Если в предыдущей итерации был Propmt
-			//мы должны записать пользовательское сообщение в соответствующий слот сессии
-			proceedPrompt(messageFromUser, lastStorySubject, &sess)
-			//fmt.Println("Проверяем стафф в сессии", sess.Stuff)
 
 			showMonologue(chatId, currentStorySubject.Monologue)
 
@@ -179,16 +175,6 @@ func redrawLastPosition(chatId int64) {
 	askQuestion(chatId, currentStoryObject)
 }
 
-func showMonologue(chatId int64, monologCollection []string) {
-	for _, monologue := range monologCollection {
-		msg := tgbotapi.NewMessage(chatId, monologue)
-
-		bot.Send(msg)
-
-		//time.Sleep(time.Second * 1)
-	}
-}
-
 func sessionStart(chatId int64) {
 	sessions[chatId] = userSession{
 		Lock:     false,
@@ -221,18 +207,19 @@ func sessionSet(chatId int64, session userSession) userSession {
 //	bot.Send(msg)
 //}
 
-//func sentDelayMessage(chatId int64, delay time.Duration, message string) {
-//
-//	go func(chatId int64, delay time.Duration, message string) {
-//		time.Sleep(time.Millisecond * delay)
-//
-//		msg := tgbotapi.NewMessage(chatId, message)
-//		bot.Send(msg)
-//	}(chatId, delay, message)
-//}
+func showMonologue(chatId int64, monologCollection []string) {
+	for _, monologue := range monologCollection {
+		msg := generateTextMessage(chatId, monologue)
+
+		bot.Send(msg)
+
+		//time.Sleep(time.Second * 1)
+	}
+}
 
 func askQuestion(chatId int64, currentStoryPosition storyIteration) {
-	msg := tgbotapi.NewMessage(chatId, currentStoryPosition.Question)
+	//msg := tgbotapi.NewMessage(chatId, currentStoryPosition.Question)
+	msg := generateTextMessage(chatId, currentStoryPosition.Question)
 
 	if len(currentStoryPosition.Answers) > 0 { // Выбор из готового ответа
 		var keyBoardButtonGroup []tgbotapi.KeyboardButton
@@ -255,6 +242,18 @@ func askQuestion(chatId int64, currentStoryPosition storyIteration) {
 	}
 
 	bot.Send(msg)
+}
+
+func generateTextMessage(chatId int64, message string) tgbotapi.MessageConfig {
+	sess, _ := sessionGet(chatId)
+	fmt.Println("Generating.", sess.Stuff)
+
+	for stuffKey, stuffItem := range sess.Stuff {
+		message = strings.Replace(message, "["+stuffKey+"]", stuffItem, -1)
+		fmt.Println("Сгенерированный текст", message)
+	}
+
+	return tgbotapi.NewMessage(chatId, message)
 }
 
 func sendImage(chatId int64, imagePath string) {
