@@ -201,10 +201,9 @@
   },
   "protective_suit_choice": {
     "Monologue": [
-      "https:\/\/drive.google.com\/file\/d\/1NJ4maFIdFUowEmvxPDOwlMpv7cILH1A7\/view?usp=sharing",
-      "Везде пусто. Только в одном лежат какие-то костюмы с респираторами! На каждом свой значок. Какой мне нужен?"
+      "https:\/\/drive.google.com\/file\/d\/1NJ4maFIdFUowEmvxPDOwlMpv7cILH1A7\/view?usp=sharing"
     ],
-    "Question": " ",
+    "Question": "Везде пусто. Только в одном лежат какие-то костюмы с респираторами! На каждом свой значок. Какой мне нужен?",
     "Answers": [
       {
         "title": "1",

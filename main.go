@@ -21,6 +21,7 @@ type storyIteration struct {
 	Answers   []map[string]string
 	Prompt    string
 	GoTo      string
+	Stuff     string
 }
 
 type userSession struct {
@@ -74,7 +75,6 @@ func proceedMessage(chatId int64, messageFromUser string) {
 			bot.Send(msg)
 		} else {
 			lastStorySubject := story[sess.Position]
-			//fmt.Println("Последний зарегистрированный кусок сюжета", lastStorySubject)
 
 			currentStorySubject, postback, err := getCurrentPosition(messageFromUser, lastStorySubject)
 			if len(err) > 0 { //Пишем ошибку и перерисовываем кнопки
@@ -84,6 +84,7 @@ func proceedMessage(chatId int64, messageFromUser string) {
 			}
 
 			proceedPrompt(messageFromUser, lastStorySubject, &sess)
+			proceedStuff(&postback, &currentStorySubject, &sess)
 
 			sess = sessionSet(chatId, userSession{ //TODO передача по ссылке, передаем только изменяемый параметр
 				Position: postback,
@@ -111,6 +112,19 @@ func proceedMessage(chatId int64, messageFromUser string) {
 		startStoryPosition := story["menu"]
 		showMonologue(chatId, startStoryPosition.Monologue)
 		askQuestion(chatId, startStoryPosition)
+	}
+}
+func proceedStuff(postback *string, currentStoryObject *storyIteration, sess *userSession) {
+	if len(currentStoryObject.Stuff) > 0 && len(currentStoryObject.GoTo) > 0 {
+		//Берем stuff и сдвигаем вперед сессию
+		if nil == sess.Stuff {
+			sess.Stuff = make(map[string]string)
+		}
+
+		sess.Stuff[currentStoryObject.Stuff] = "true"
+
+		*postback = currentStoryObject.GoTo
+		*currentStoryObject = story[currentStoryObject.GoTo]
 	}
 }
 
@@ -145,30 +159,7 @@ func getCurrentPosition(messageFromUser string, lastStorySubject storyIteration)
 			}
 		}
 
-		return storyIteration{}, "", "Я вас не понимаю 99."
-
-		//newPositionName, ok := userAnswers[messageFromUser]
-		//if !ok {
-		//	return storyIteration{}, "Я вас не понимаю1."
-		//}
-		//
-		//currentStorySubject, ok := story[newPositionName]
-		//if !ok {
-		//	return storyIteration{}, "Я вас не понимаю2."
-		//}
-		//
-		//isCorrectUserMessage := false
-		//for _, answer := range lastStorySubject.Answers {
-		//	if answer["title"] == messageFromUser {
-		//		isCorrectUserMessage = true
-		//	}
-		//}
-		//
-		//if !isCorrectUserMessage {
-		//	return storyIteration{}, "Я вас не понимаю3."
-		//}
-		//
-		//return currentStorySubject, ""
+		return storyIteration{}, "", "Я вас не понимаю."
 
 	} else if len(lastStorySubject.Prompt) > 0 && len(lastStorySubject.GoTo) > 0 { //Проверяем, если предыдущая итерация закончилась запросом пользовательского ввода
 		//TODO Проверка ввода пользователя на ругательства
@@ -190,20 +181,20 @@ func getCurrentPosition(messageFromUser string, lastStorySubject storyIteration)
 func redrawLastPosition(chatId int64, message string, lastStorySubject storyIteration) {
 	//TODO половина кода повторяется с askQuestion - вынести общее в другую функцию
 	msg := tgbotapi.NewMessage(chatId, message)
-	var keyBoardButtonGroup []tgbotapi.KeyboardButton
+
+	markup := tgbotapi.NewReplyKeyboard()
 
 	for _, button := range lastStorySubject.Answers {
-		keyBoardButtonGroup = append(keyBoardButtonGroup, tgbotapi.KeyboardButton{
+		row := []tgbotapi.KeyboardButton{{
 			Text:            button["title"],
 			RequestContact:  false,
 			RequestLocation: false,
-		})
+		}}
+		markup.Keyboard = append(markup.Keyboard, row)
 	}
 
-	markup := tgbotapi.NewReplyKeyboard(keyBoardButtonGroup)
 	markup.OneTimeKeyboard = true
 	msg.ReplyMarkup = &markup
-
 	bot.Send(msg)
 }
 
@@ -239,8 +230,8 @@ func sessionSet(chatId int64, session userSession) userSession {
 //	bot.Send(msg)
 //}
 
-func showMonologue(chatId int64, monologCollection []string) {
-	for _, monologue := range monologCollection {
+func showMonologue(chatId int64, monologueCollection []string) {
+	for _, monologue := range monologueCollection {
 		msg := generateTextMessage(chatId, monologue)
 
 		bot.Send(msg)
@@ -250,30 +241,31 @@ func showMonologue(chatId int64, monologCollection []string) {
 }
 
 func askQuestion(chatId int64, currentStoryPosition storyIteration) {
-	//msg := tgbotapi.NewMessage(chatId, currentStoryPosition.Question)
-	msg := generateTextMessage(chatId, currentStoryPosition.Question)
+	if len(currentStoryPosition.Question) > 0 {
+		msg := generateTextMessage(chatId, currentStoryPosition.Question)
 
-	if len(currentStoryPosition.Answers) > 0 { // Выбор из готового ответа
-		var keyBoardButtonGroup []tgbotapi.KeyboardButton
+		if len(currentStoryPosition.Answers) > 0 { // Выбор из готового ответа
 
-		for _, button := range currentStoryPosition.Answers {
-			//fmt.Println(button)
-			keyBoardButtonGroup = append(keyBoardButtonGroup, tgbotapi.KeyboardButton{
-				Text:            button["title"],
-				RequestContact:  false,
-				RequestLocation: false,
-			})
+			markup := tgbotapi.NewReplyKeyboard()
+			for _, button := range currentStoryPosition.Answers {
+				row := []tgbotapi.KeyboardButton{{
+					Text:            button["title"],
+					RequestContact:  false,
+					RequestLocation: false,
+				}}
+				markup.Keyboard = append(markup.Keyboard, row)
+			}
+
+			markup.OneTimeKeyboard = true
+			msg.ReplyMarkup = &markup
+
+		} else if len(currentStoryPosition.Prompt) > 0 { // Ожидание ввода от пользователя
+			//TODO Ждем ввода имени иль ничего не делаем
+
 		}
 
-		markup := tgbotapi.NewReplyKeyboard(keyBoardButtonGroup)
-		markup.OneTimeKeyboard = true
-		msg.ReplyMarkup = &markup
-	} else if len(currentStoryPosition.Prompt) > 0 { // Ожидание ввода от пользователя
-		//TODO Ждем ввода имени иль ничего не делаем
-
+		bot.Send(msg)
 	}
-
-	bot.Send(msg)
 }
 
 func generateTextMessage(chatId int64, message string) tgbotapi.MessageConfig {
@@ -281,7 +273,6 @@ func generateTextMessage(chatId int64, message string) tgbotapi.MessageConfig {
 
 	for stuffKey, stuffItem := range sess.Stuff {
 		message = strings.Replace(message, "["+stuffKey+"]", stuffItem, -1)
-		fmt.Println("Сгенерированный текст", message)
 	}
 
 	return tgbotapi.NewMessage(chatId, message)
@@ -327,13 +318,6 @@ func loadStory() {
 	json.Unmarshal(file, &userAnswers)
 
 	log.Printf("Story is loaded")
-
-	//fmt.Printf("%v\n", story["first"])
-
-	item := story["first"]
-	for _, answer := range item.Answers {
-		fmt.Println(answer)
-	}
 }
 
 func checkStory() {
