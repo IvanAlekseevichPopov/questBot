@@ -18,7 +18,7 @@ const botToken = "347808432:AAFJQQOUDKCHFBaSxAbVCykyIMa-D9dCcE4"
 type storyIteration struct {
 	Monologue []string
 	Question  string
-	Answers   []string
+	Answers   []map[string]string
 	Prompt    string
 	GoTo      string
 }
@@ -55,7 +55,7 @@ func main() {
 			continue
 		}
 
-		go proceedMessage(update.Message.Chat.ID, update.Message.Text)
+		proceedMessage(update.Message.Chat.ID, update.Message.Text)
 	}
 }
 
@@ -76,7 +76,7 @@ func proceedMessage(chatId int64, messageFromUser string) {
 			lastStorySubject := story[sess.Position]
 			//fmt.Println("Последний зарегистрированный кусок сюжета", lastStorySubject)
 
-			currentStorySubject, err := getCurrentPosition(messageFromUser, lastStorySubject)
+			currentStorySubject, postback, err := getCurrentPosition(messageFromUser, lastStorySubject)
 			if len(err) > 0 { //Пишем ошибку и перерисовываем кнопки
 				redrawLastPosition(chatId, err, lastStorySubject)
 
@@ -86,7 +86,7 @@ func proceedMessage(chatId int64, messageFromUser string) {
 			proceedPrompt(messageFromUser, lastStorySubject, &sess)
 
 			sess = sessionSet(chatId, userSession{ //TODO передача по ссылке, передаем только изменяемый параметр
-				Position: userAnswers[messageFromUser],
+				Position: postback,
 				Lock:     true,
 				Stuff:    sess.Stuff,
 			})
@@ -96,7 +96,7 @@ func proceedMessage(chatId int64, messageFromUser string) {
 			askQuestion(chatId, currentStorySubject)
 
 			sessionSet(chatId, userSession{
-				Position: userAnswers[messageFromUser], //TODO Атата по уродски читаем из мапы 2 раза
+				Position: postback,
 				Lock:     false,
 				Stuff:    sess.Stuff,
 			})
@@ -124,60 +124,77 @@ func proceedPrompt(userMessage string, lastStorySubject storyIteration, sess *us
 	}
 }
 
-func getCurrentPosition(messageFromUser string, lastStorySubject storyIteration) (storyIteration, string) {
+func getCurrentPosition(messageFromUser string, lastStorySubject storyIteration) (storyIteration, string, string) {
+	fmt.Println("Ищем текущую итерацию.Последняя: ", lastStorySubject)
 
 	if len(lastStorySubject.Answers) > 0 {
 		//Проверяем, если предыдущая итерация закончилась выбором ответа
-		newPositionName, ok := userAnswers[messageFromUser]
-		if !ok {
-			return storyIteration{}, "Я вас не понимаю1."
-		}
-
-		currentStorySubject, ok := story[newPositionName]
-		if !ok {
-			return storyIteration{}, "Я вас не понимаю2."
-		}
-
-		isCorrectUserMessage := false
+		var postback string
 		for _, answer := range lastStorySubject.Answers {
-			if answer == messageFromUser {
-				isCorrectUserMessage = true
+			if answer["title"] == messageFromUser {
+				postback = answer["postback"]
+				break
 			}
 		}
 
-		if !isCorrectUserMessage {
-			return storyIteration{}, "Я вас не понимаю3."
+		if len(postback) > 0 {
+			storyItem, ok := story[postback]
+			if ok {
+				fmt.Println("Нашел!", storyItem)
+				return storyItem, postback, ""
+			}
 		}
 
-		return currentStorySubject, ""
+		return storyIteration{}, "", "Я вас не понимаю 99."
+
+		//newPositionName, ok := userAnswers[messageFromUser]
+		//if !ok {
+		//	return storyIteration{}, "Я вас не понимаю1."
+		//}
+		//
+		//currentStorySubject, ok := story[newPositionName]
+		//if !ok {
+		//	return storyIteration{}, "Я вас не понимаю2."
+		//}
+		//
+		//isCorrectUserMessage := false
+		//for _, answer := range lastStorySubject.Answers {
+		//	if answer["title"] == messageFromUser {
+		//		isCorrectUserMessage = true
+		//	}
+		//}
+		//
+		//if !isCorrectUserMessage {
+		//	return storyIteration{}, "Я вас не понимаю3."
+		//}
+		//
+		//return currentStorySubject, ""
 
 	} else if len(lastStorySubject.Prompt) > 0 && len(lastStorySubject.GoTo) > 0 { //Проверяем, если предыдущая итерация закончилась запросом пользовательского ввода
 		//TODO Проверка ввода пользователя на ругательства
 
 		currentStorySubject, ok := story[lastStorySubject.GoTo]
 		if !ok {
-			return storyIteration{}, "Я вас не понимаю4."
+			return storyIteration{}, "", "Я вас не понимаю4."
 		}
 
-		return currentStorySubject, ""
-	} else {
-		fmt.Println("Неизвестно, что делать дальше")
-		fmt.Println(lastStorySubject)
-		fmt.Println(messageFromUser)
-		os.Exit(1)
+		return currentStorySubject, lastStorySubject.GoTo, ""
 	}
 
-	return storyIteration{}, "Что-то явно пошло не так. Загляни в консоль"
+	log.Println("Неизвестно, что делать дальше")
+	fmt.Println(lastStorySubject)
+	fmt.Println(messageFromUser)
+	return storyIteration{}, "", "Alert! Error! Unknown user reaction"
 }
 
 func redrawLastPosition(chatId int64, message string, lastStorySubject storyIteration) {
-
+	//TODO половина кода повторяется с askQuestion - вынести общее в другую функцию
 	msg := tgbotapi.NewMessage(chatId, message)
 	var keyBoardButtonGroup []tgbotapi.KeyboardButton
 
 	for _, button := range lastStorySubject.Answers {
 		keyBoardButtonGroup = append(keyBoardButtonGroup, tgbotapi.KeyboardButton{
-			Text:            button,
+			Text:            button["title"],
 			RequestContact:  false,
 			RequestLocation: false,
 		})
@@ -228,7 +245,7 @@ func showMonologue(chatId int64, monologCollection []string) {
 
 		bot.Send(msg)
 
-		time.Sleep(time.Second * 3)
+		time.Sleep(time.Second * 1)
 	}
 }
 
@@ -242,7 +259,7 @@ func askQuestion(chatId int64, currentStoryPosition storyIteration) {
 		for _, button := range currentStoryPosition.Answers {
 			//fmt.Println(button)
 			keyBoardButtonGroup = append(keyBoardButtonGroup, tgbotapi.KeyboardButton{
-				Text:            button,
+				Text:            button["title"],
 				RequestContact:  false,
 				RequestLocation: false,
 			})
@@ -261,7 +278,6 @@ func askQuestion(chatId int64, currentStoryPosition storyIteration) {
 
 func generateTextMessage(chatId int64, message string) tgbotapi.MessageConfig {
 	sess, _ := sessionGet(chatId)
-	fmt.Println("Generating.", sess.Stuff)
 
 	for stuffKey, stuffItem := range sess.Stuff {
 		message = strings.Replace(message, "["+stuffKey+"]", stuffItem, -1)
@@ -311,12 +327,20 @@ func loadStory() {
 	json.Unmarshal(file, &userAnswers)
 
 	log.Printf("Story is loaded")
+
+	//fmt.Printf("%v\n", story["first"])
+
+	item := story["first"]
+	for _, answer := range item.Answers {
+		fmt.Println(answer)
+	}
 }
 
 func checkStory() {
 	//Проверка мапы на корректность
 	//TODO - не должно быть в отдной и той же итерации Answers и Prompt
 	//TODO - если есть Prompt, должен быть и GoTo
+	//TODO - что всем postback соответствуют пункты из истории
 }
 
 func initBot() {

@@ -5,25 +5,35 @@
     ],
     "Question": "Главное меню",
     "Answers": [
-      "Начать игру",
-      "Помощь"
+      {
+        "title": "Начать игру",
+        "postback": "first"
+      },
+      {
+        "title": "Помощь",
+        "postback": "help"
+      }
     ],
     "Prompt": "",
     "GoTo": ""
   },
-  "start": {
+  "first": {
     "Monologue": [
-      "Здравствуйте",
-      "Как я рад, что мне удалось с кем-то связаться",
-      "Мне очень нужна помощь"
+      "Здравствуйте!",
+      "Как я рад, что мне удалось с кем-то связаться!",
+      "Мне очень нужна помощь..."
     ],
     "Question": "Вы здесь?",
     "Answers": [
-      "Стоп, кто это?!",
-      "Я на связи."
-    ],
-    "Prompt": "",
-    "GoTo": ""
+      {
+        "title": "Стоп, кто это?",
+        "postback": "meeting"
+      },
+      {
+        "title": "Я на связи",
+        "postback": "meeting"
+      }
+    ]
   },
   "meeting": {
     "Monologue": [
@@ -35,13 +45,516 @@
   },
   "intro": {
     "Monologue": [
-      "Слушай [userName], дело вот в чем. Мой отец - научный сотрудник лаборатории 'Весна-1'. И я сейчас тут.",
-      "Просто так сюда не попадешь, но меня пустили по его разрешению."
+      "Слушай, [userName], дело вот в чём. Мой отец — научный сотрудник лаборатории \"Весна-1\". И я сейчас тут.",
+      "Просто так сюда не попадёшь, но меня пустили по его разрешению."
     ],
-    "Question": "А я даже не понимаю что там, на этих фотографиях! Я вообще не химик... И не биолог",
+    "Question": "А я даже не понимаю, что там, на этих фотографиях! Я вообще не химик... И не биолог...",
     "Answers": [
-      "Успокойся, пожалуйста",
-      "Так, расскажи, что именно случилось"
+      {
+        "title": "Успокойся, пожалуйста.",
+        "postback": "photo_problem"
+      },
+      {
+        "title": "Так, расскажи, что именно случилось.",
+        "postback": "photo_problem"
+      }
+    ]
+  },
+  "photo_problem": {
+    "Question": "Да меня позвали сделать фотографии и посмотреть, как тут всё устроено... Ой!",
+    "Answers": [
+      {
+        "title": "Что такое?",
+        "postback": "radio_alert"
+      },
+      {
+        "title": "Ты цел?",
+        "postback": "radio_alert"
+      }
+    ]
+  },
+  "radio_alert": {
+    "Question": "Снова голос робота по радио. Он говорит, что случилась утечка! «Всему личному составу срочно надеть средства защиты. Нахождение вне изолированных боксов опасно». ",
+    "Answers": [
+      {
+        "title": "Ты знаешь, где эти средства защиты?",
+        "postback": "isz_Question"
+      },
+      {
+        "title": "Так, я в такие дела не ввязываюсь.",
+        "postback": "pray"
+      }
+    ]
+  },
+  "pray": {
+    "Question": "Ну [userName], пожалуйста! Я же здесь один!",
+    "Answers": [
+      {
+        "title": "Нет, прости",
+        "postback": "assist_refuse"
+      },
+      {
+        "title": "А где все учёные? Где твой отец?",
+        "postback": "search_others"
+      }
+    ]
+  },
+  "assist_refuse": {
+    "Monologue": [
+      "https:\/\/drive.google.com\/file\/d\/0B7yLdpflTYQIenl4bEJHN2swZ00\/view?usp=sharing",
+      "Вот из-за таких проблем с коммуникативными навыками и погибают люди. Героя уже не воскресить, но можно почитать статью «Категорический императив: как нам общаться друг с другом»",
+      "https:\/\/newtonew.com\/culture\/kategoricheskiy-imperativ-kak-obshchatsya-drug-s-drugom"
+    ]
+  },
+  "isz_Question": {
+    "Question": "Нет",
+    "Answers": [
+      {
+        "title": "Где ты сейчас находишься?",
+        "postback": "search_others"
+      },
+      {
+        "title": "А где все ученые? Где твой отец?",
+        "postback": "search_others"
+      }
+    ]
+  },
+  "search_others": {
+    "Monologue": [
+      "Сейчас я в боксе с большими окнами, через него видно лабораторию. Там на столах колбы и микроскопы."
+    ],
+    "Question": "Отца я в последний раз видел там... А потом вырубился свет и включилась сирена. А потом по радио сказали, что случилась авария, и что надо срочно уходить, чтобы не заразиться вирусом.",
+    "Answers": [
+      {
+        "title": "Не выходи из помещения, пока не найдёшь спецзащиту.",
+        "postback": "what_next"
+      },
+      {
+        "title": "Тогда выходи и иди в лабораторию.",
+        "postback": "go_to_death"
+      }
+    ]
+  },
+  "what_next": {
+    "Question": "Что же делать?",
+    "Answers": [
+      {
+        "title": "Сделай фотографию помещения и пришли мне.",
+        "postback": "make_photo"
+      },
+      {
+        "title": "А ты точно фотограф?",
+        "postback": "school"
+      }
+    ]
+  },
+  "school": {
+    "Question": "Вообще-то, я ещё в школе учусь. А фотографией так, увлекаюсь.",
+    "Answers": [
+      {
+        "title": "Понятно, ты одарённый",
+        "postback": "father_chief"
+      },
+      {
+        "title": "И как тебя пустили на секретный объект?",
+        "postback": "father_chief"
+      }
+    ]
+  },
+  "father_chief": {
+    "Question": "Мой отец тут главный. И он одобряет работу с молодёжью.",
+    "Answers": [
+      {
+        "title": "Сделай фотографию помещения и пришли мне.",
+        "postback": "make_photo"
+      }
+    ]
+  },
+  "make_photo": {
+    "Monologue": [
+      "https:\/\/farm2.static.flickr.com\/1678\/25488504503_8d4af3d71b_b.jpg"
+    ],
+    "Question": "Здесь куча шкафов. На входе я подобрал фонарь и монтировку.",
+    "Answers": [
+      {
+        "title": "Попробуй открыть шкафчики монтировкой.",
+        "postback": "try_open_locker"
+      }
+    ]
+  },
+  "try_open_locker": {
+    "Question": "Открыл несколько. Кое-что нашёл! Это магнитная карта какая-то...",
+    "Answers": [
+      {
+        "title": "Возьми её и открывай второй шкаф.",
+        "postback": "get_card"
+      },
+      {
+        "title": "Оставь её в покое и открывай остальные.",
+        "postback": "protective_suit_choice"
+      }
+    ]
+  },
+  "get_card": {
+    "Stuff": "authCard",
+    "GoTo": "protective_suit_choice"
+  },
+  "protective_suit_choice": {
+    "Monologue": [
+      "https:\/\/drive.google.com\/file\/d\/1NJ4maFIdFUowEmvxPDOwlMpv7cILH1A7\/view?usp=sharing",
+      "Везде пусто. Только в одном лежат какие-то костюмы с респираторами! На каждом свой значок. Какой мне нужен?"
+    ],
+    "Question": " ",
+    "Answers": [
+      {
+        "title": "1",
+        "postback": "wrong_costume"
+      },
+      {
+        "title": "2",
+        "postback": "wrong_costume"
+      },
+      {
+        "title": "3",
+        "postback": "right_costume"
+      }
+    ]
+  },
+  "wrong_costume": {
+    "Monologue": [
+      "Хорошо, надеваю этот комбинезон. Теперь нужно выбраться в лабораторию."
+    ],
+    "GoTo": "go_to_death"
+  },
+  "go_to_death": {
+    "Monologue": [
+      "Я выхожу!"
+    ],
+    "Question": "Вот, вышел. Как-то мне нехорошо... В глазах режет, и такой вкус во рту...",
+    "Answers": [
+      {
+        "title": "Виктор, ты цел?!",
+        "postback": "death_without_respirator"
+      },
+      {
+        "title": "Обратно! Срочно иди назад!",
+        "postback": "death_without_respirator"
+      }
+    ]
+  },
+  "death_without_respirator": {
+    "Monologue": [
+      "Для твоего героя всё закончилось.",
+      "То ли у тебя что-то со внимательностью, то ли прихрамывают логические способности. Пройди тест «Пользуетесь ли вы логикой», чтобы узнать, в чём твоя проблема.",
+      "https:\/\/newtonew.com\/test\/basic-logic-test"
+    ],
+    "GoTo": "exit"
+  },
+  "right_costume": {
+    "Monologue": [
+      "Отлично, я надел комбинезон и выхожу в лабораторию."
+    ],
+    "Question": "Кажется, всё в порядке...",
+    "Answers": [
+      {
+        "title": "Отлично!",
+        "postback": "oh"
+      },
+      {
+        "title": "Всё равно не задерживайся, нужно выбираться.",
+        "postback": "oh"
+      }
+    ]
+  },
+  "oh": {
+    "Monologue": [
+      "Ой!"
+    ],
+    "Question": "Свет совсем погас! И двери заклинило!",
+    "Answers": [
+      {
+        "title": "Не волнуйся, включи фонарик на телефоне.!",
+        "postback": "to_generator"
+      },
+      {
+        "title": "Должен быть источник резервного питания.",
+        "postback": "to_generator"
+      }
+    ]
+  },
+  "to_generator": {
+    "Monologue": [
+      "Я посветил фонариком на схему на стене. Здесь есть генераторная, на один уровень ниже.",
+      "Но как туда попасть?..",
+      "Придумал! Здесь есть вентиляционные ходы, там можно пробираться пригнувшись. Я залезал в такой. Но там темно и много поворотов, я заблужусь...",
+      "https:\/\/i.pinimg.com\/736x\/cd\/b1\/5f\/cdb15f2687f951ad3c37ca4d31719d02--maze-design-ideas-simple-maze.jpg"
+    ],
+    "GoTo": "labyrinth_start",
+    "Question": "Нужна помощь!"
+  },
+  "labyrinth_start": {
+    "Monologue": [
+      "Подсказка: Чтобы задать направление, пользуйтесь этими значками из раздела Symbols and Flags (картинка)."
+    ],
+    "Question": "Чтобы понять, куда идти, мне хватит и значков.",
+    "Answers": [
+      {
+        "title": "вверх",
+        "postback": "labyrinth1"
+      },
+      {
+        "title": "вниз",
+        "postback": "labyrinth_start"
+      },
+      {
+        "title": "влево",
+        "postback": "wrong_direction"
+      },
+      {
+        "title": "вправо",
+        "postback": "wrong_tunnel_start"
+      }
+    ]
+  },
+  "wrong_direction": {
+    "Question": "Тут тупик",
+    "Answers": [
+      {
+        "title": "Вернись к началу",
+        "postback": "labyrinth_start"
+      }
+    ]
+  },
+  "wrong_tunnel_start": {
+    "Question": "Да, хорошо",
+    "Answers": [
+      {
+        "title": "вверх",
+        "postback": "wrong_direction"
+      },
+      {
+        "title": "вниз",
+        "postback": "wrong_direction"
+      },
+      {
+        "title": "влево",
+        "postback": "labyrinth_start"
+      },
+      {
+        "title": "вправо",
+        "postback": "wrong_direction"
+      }
+    ]
+  },
+  "labyrinth1": {
+    "Question": "Да, хорошо",
+    "Answers": [
+      {
+        "title": "вверх",
+        "postback": "wrong_direction"
+      },
+      {
+        "title": "вниз",
+        "postback": "labyrinth_start"
+      },
+      {
+        "title": "влево",
+        "postback": "wrong_direction"
+      },
+      {
+        "title": "вправо",
+        "postback": "labyrinth2"
+      }
+    ]
+  },
+  "labyrinth2": {
+    "Question": "Иду",
+    "Answers": [
+      {
+        "title": "вверх",
+        "postback": "labyrinth3"
+      },
+      {
+        "title": "вниз",
+        "postback": "wrong_direction"
+      },
+      {
+        "title": "влево",
+        "postback": "labyrinth1"
+      },
+      {
+        "title": "вправо",
+        "postback": "wrong_direction"
+      }
+    ]
+  },
+  "labyrinth3": {
+    "Question": "Иду",
+    "Answers": [
+      {
+        "title": "вверх",
+        "postback": "wrong_direction"
+      },
+      {
+        "title": "вниз",
+        "postback": "labyrinth2"
+      },
+      {
+        "title": "влево",
+        "postback": "labyrinth4"
+      },
+      {
+        "title": "вправо",
+        "postback": "wrong_direction"
+      }
+    ]
+  },
+  "labyrinth4": {
+    "Question": "Хорошо",
+    "Answers": [
+      {
+        "title": "вверх",
+        "postback": "labyrinth5"
+      },
+      {
+        "title": "вниз",
+        "postback": "wrong_direction"
+      },
+      {
+        "title": "влево",
+        "postback": "wrong_direction"
+      },
+      {
+        "title": "вправо",
+        "postback": "labyrinth3"
+      }
+    ]
+  },
+  "labyrinth5": {
+    "Question": "Иду",
+    "Answers": [
+      {
+        "title": "вверх",
+        "postback": "wrong_direction"
+      },
+      {
+        "title": "вниз",
+        "postback": "labyrinth4"
+      },
+      {
+        "title": "влево",
+        "postback": "wrong_direction"
+      },
+      {
+        "title": "вправо",
+        "postback": "in_generator"
+      }
+    ]
+  },
+  "in_generator": {
+    "Question": "Фух, я добрался!",
+    "Answers": [
+      {
+        "title": "Поздравляю! Давай включим свет и разблокируем двери.",
+        "postback": "knife_switch"
+      },
+      {
+        "title": "Теперь попробуй запустить резервные генераторы.",
+        "postback": "knife_switch"
+      }
+    ]
+  },
+  "knife_switch": {
+    "Monologue": [
+      "Сейчас, тут есть рубильники.",
+      "Не получается, генераторы не заправлены.",
+      "Тут стоят большие баки со шлангами.Сколько разных..."
+    ],
+    "GoTo": "fuel_choice"
+  },
+  "fuel_choice": {
+    "Question": "Бензин, спирт, тосол, растворитель, раствор хлора, мазут, машинное масло... Что мне нужно?",
+    "Answers": [
+      {
+        "title": "Бензин и тосол",
+        "postback": "water_fuel"
+      },
+      {
+        "title": "Раствор хлора и спирт",
+        "postback": "explosion"
+      },
+      {
+        "title": "Бензин и машинное масло.",
+        "postback": "oil_fuel"
+      }
+    ]
+  },
+  "explosion": {
+    "Monologue": [
+      "Хорошо, подключил шланги, заправляется...",
+      "О, чёрт... Что-то не так!",
+      "https:\/\/drive.google.com\/file\/d\/1T7FOe4LRAj9HnDSKoNhgwezsLFKjHZxX\/view?usp=sharing",
+      "Возможно, не стоило нажимать на кнопки наугад. Передохни, почитай статью о том, как работать с информацией осмысленно, и возвращайся. ",
+      "https:\/\/newtonew.com\/science\/kak-rabotat-s-informaciey-osmyslenno"
+    ],
+    "GoTo": "exit"
+  },
+  "water_fuel": {
+    "Monologue": [
+      "Хорошо, подключил шланги, заправляется...",
+      "Ничего не произошло. Вижу в окошко, что они  разделились слоями, а генераторы не включаются."
+    ],
+    "Question": "Попробовать еще раз?",
+    "Answers": [
+      {
+        "title": "Да, начнем с начала",
+        "postback": "fuel_choice"
+      }
+    ]
+  },
+  "oil_fuel": {
+    "Monologue": [
+      "Хорошо, подключил шланги, заправляется...",
+      "Ура, запустилось!",
+      "Да будет свет!",
+      "Теперь я могу вернуться по лестнице, а не через вентиляцию."
+    ],
+    "Question": "Я снова в лаборатории.Так, только что-то мне нехорошо...",
+    "Answers": [
+      {
+        "title": "Ты же не снимал защитный костюм?",
+        "postback": "check_respirator"
+      },
+      {
+        "title": "Респиратор всё ещё на тебе?",
+        "postback": "check_respirator"
+      }
+    ]
+  },
+  "check_respirator": {
+    "Monologue": [
+      "И костюм, и респиратор на месте... Может, приподнял разок, чтобы нос вытереть.",
+      "Кажется, вирус всё-таки начинает действовать.",
+      "Я слышал, от него есть антидот, но как его найти?.."
+    ],
+    "GoTo": "next_series"
+  },
+  "next_series": {
+    "Monologue": [
+      "Продолжение следует..."
+    ]
+  },
+  "exit": {
+    "Question": "Игра окончена",
+    "Answers": [
+      {
+        "title": "Выйти",
+        "postback": "finish"
+      },
+      {
+        "title": "Попробовать еще раз",
+        "postback": "first"
+      }
     ]
   }
 }
