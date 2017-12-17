@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-telegram-bot-api/telegram-bot-api"
 )
@@ -54,7 +55,7 @@ func main() {
 			continue
 		}
 
-		proceedMessage(update.Message.Chat.ID, update.Message.Text)
+		go proceedMessage(update.Message.Chat.ID, update.Message.Text)
 	}
 }
 
@@ -68,15 +69,16 @@ func proceedMessage(chatId int64, messageFromUser string) {
 		//fmt.Println("Сессия найдена")
 
 		if sess.Lock {
-			//fmt.Println("Заблокирован ввод пользователя")
+			fmt.Println("Заблокирован ввод пользователя")
+			msg := tgbotapi.NewMessage(chatId, "Ввод заблокирован")
+			bot.Send(msg)
 		} else {
 			lastStorySubject := story[sess.Position]
 			//fmt.Println("Последний зарегистрированный кусок сюжета", lastStorySubject)
 
 			currentStorySubject, err := getCurrentPosition(messageFromUser, lastStorySubject)
-			if len(err) > 0 {
-				msg := tgbotapi.NewMessage(chatId, err)
-				bot.Send(msg)
+			if len(err) > 0 { //Пишем ошибку и перерисовываем кнопки
+				redrawLastPosition(chatId, err, lastStorySubject)
 
 				return
 			}
@@ -105,7 +107,10 @@ func proceedMessage(chatId int64, messageFromUser string) {
 		//Сессия не найдена - создаем новую, рисуем главное меню
 		//sendStartMenu(chatId)
 		sessionStart(chatId)
-		redrawLastPosition(chatId)
+
+		startStoryPosition := story["menu"]
+		showMonologue(chatId, startStoryPosition.Monologue)
+		askQuestion(chatId, startStoryPosition)
 	}
 }
 
@@ -165,14 +170,24 @@ func getCurrentPosition(messageFromUser string, lastStorySubject storyIteration)
 	return storyIteration{}, "Что-то явно пошло не так. Загляни в консоль"
 }
 
-func redrawLastPosition(chatId int64) {
-	sess, _ := sessionGet(chatId)
+func redrawLastPosition(chatId int64, message string, lastStorySubject storyIteration) {
 
-	currentStoryObject := story[sess.Position]
+	msg := tgbotapi.NewMessage(chatId, message)
+	var keyBoardButtonGroup []tgbotapi.KeyboardButton
 
-	showMonologue(chatId, currentStoryObject.Monologue)
+	for _, button := range lastStorySubject.Answers {
+		keyBoardButtonGroup = append(keyBoardButtonGroup, tgbotapi.KeyboardButton{
+			Text:            button,
+			RequestContact:  false,
+			RequestLocation: false,
+		})
+	}
 
-	askQuestion(chatId, currentStoryObject)
+	markup := tgbotapi.NewReplyKeyboard(keyBoardButtonGroup)
+	markup.OneTimeKeyboard = true
+	msg.ReplyMarkup = &markup
+
+	bot.Send(msg)
 }
 
 func sessionStart(chatId int64) {
@@ -213,7 +228,7 @@ func showMonologue(chatId int64, monologCollection []string) {
 
 		bot.Send(msg)
 
-		//time.Sleep(time.Second * 1)
+		time.Sleep(time.Second * 3)
 	}
 }
 
