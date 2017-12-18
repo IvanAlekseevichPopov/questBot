@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/go-telegram-bot-api/telegram-bot-api"
 )
@@ -94,15 +93,22 @@ func proceedMessage(chatId int64, messageFromUser string) {
 
 			showMonologue(chatId, currentStorySubject.Monologue)
 
-			askQuestion(chatId, currentStorySubject)
+			isQuestionAsked := askQuestion(chatId, currentStorySubject)
+			if !isQuestionAsked && len(currentStorySubject.GoTo) > 0 { //обработка чистого монолога и goto
+				redrawLastPosition(chatId, "12", story[currentStorySubject.GoTo])
 
-			sessionSet(chatId, userSession{
-				Position: postback,
-				Lock:     false,
-				Stuff:    sess.Stuff,
-			})
-
-			//fmt.Println(sess.Stuff)
+				sess = sessionSet(chatId, userSession{
+					Position: currentStorySubject.GoTo,
+					Lock:     false,
+					Stuff:    sess.Stuff,
+				})
+			} else {
+				sessionSet(chatId, userSession{
+					Position: postback,
+					Lock:     false,
+					Stuff:    sess.Stuff,
+				})
+			}
 		}
 	} else {
 		//Сессия не найдена - создаем новую, рисуем главное меню
@@ -114,6 +120,7 @@ func proceedMessage(chatId int64, messageFromUser string) {
 		askQuestion(chatId, startStoryPosition)
 	}
 }
+
 func proceedStuff(postback *string, currentStoryObject *storyIteration, sess *userSession) {
 	if len(currentStoryObject.Stuff) > 0 && len(currentStoryObject.GoTo) > 0 {
 		//Берем stuff и сдвигаем вперед сессию
@@ -139,7 +146,7 @@ func proceedPrompt(userMessage string, lastStorySubject storyIteration, sess *us
 }
 
 func getCurrentPosition(messageFromUser string, lastStorySubject storyIteration) (storyIteration, string, string) {
-	fmt.Println("Ищем текущую итерацию.Последняя: ", lastStorySubject)
+	//fmt.Println("Ищем текущую итерацию.Последняя: ", lastStorySubject)
 
 	if len(lastStorySubject.Answers) > 0 {
 		//Проверяем, если предыдущая итерация закончилась выбором ответа
@@ -154,7 +161,7 @@ func getCurrentPosition(messageFromUser string, lastStorySubject storyIteration)
 		if len(postback) > 0 {
 			storyItem, ok := story[postback]
 			if ok {
-				fmt.Println("Нашел!", storyItem)
+				//fmt.Println("Нашел!", storyItem)
 				return storyItem, postback, ""
 			}
 		}
@@ -176,26 +183,6 @@ func getCurrentPosition(messageFromUser string, lastStorySubject storyIteration)
 	fmt.Println(lastStorySubject)
 	fmt.Println(messageFromUser)
 	return storyIteration{}, "", "Alert! Error! Unknown user reaction"
-}
-
-func redrawLastPosition(chatId int64, message string, lastStorySubject storyIteration) {
-	//TODO половина кода повторяется с askQuestion - вынести общее в другую функцию
-	msg := tgbotapi.NewMessage(chatId, message)
-
-	markup := tgbotapi.NewReplyKeyboard()
-
-	for _, button := range lastStorySubject.Answers {
-		row := []tgbotapi.KeyboardButton{{
-			Text:            button["title"],
-			RequestContact:  false,
-			RequestLocation: false,
-		}}
-		markup.Keyboard = append(markup.Keyboard, row)
-	}
-
-	markup.OneTimeKeyboard = true
-	msg.ReplyMarkup = &markup
-	bot.Send(msg)
 }
 
 func sessionStart(chatId int64) {
@@ -231,16 +218,23 @@ func sessionSet(chatId int64, session userSession) userSession {
 //}
 
 func showMonologue(chatId int64, monologueCollection []string) {
-	for _, monologue := range monologueCollection {
-		msg := generateTextMessage(chatId, monologue)
+	for _, message := range monologueCollection {
+		var msg tgbotapi.Chattable
 
+		if strings.Contains(message, "images") {
+			msg = tgbotapi.NewPhotoUpload(chatId, message)
+		} else if strings.Contains(message, "sound") {
+			msg = tgbotapi.NewPhotoUpload(chatId, message)
+		} else {
+			msg = generateTextMessage(chatId, message)
+		}
 		bot.Send(msg)
 
-		time.Sleep(time.Second * 1)
+		//time.Sleep(time.Second * 1)
 	}
 }
 
-func askQuestion(chatId int64, currentStoryPosition storyIteration) {
+func askQuestion(chatId int64, currentStoryPosition storyIteration) bool {
 	if len(currentStoryPosition.Question) > 0 {
 		msg := generateTextMessage(chatId, currentStoryPosition.Question)
 
@@ -265,7 +259,42 @@ func askQuestion(chatId int64, currentStoryPosition storyIteration) {
 		}
 
 		bot.Send(msg)
+		return true
 	}
+
+	return false
+	//else if len(currentStoryPosition.GoTo) > 0 { //Только монолог и переход
+	//	fmt.Println("Нет вопросов. Есть Goto. Перерисовываем.. ")
+	//	redrawLastPosition(chatId, " ", story[currentStoryPosition.GoTo])
+	//}
+}
+
+func redrawLastPosition(chatId int64, message string, lastStorySubject storyIteration) {
+	//TODO половина кода повторяется с askQuestion - вынести общее в другую функцию
+	msg := tgbotapi.NewMessage(chatId, message)
+
+	//fmt.Println("Перерисовка изнутри. Answers", lastStorySubject.Answers)
+	//fmt.Println("Перерисовка изнутри. GoTo", lastStorySubject.GoTo)
+	//if len(lastStorySubject.Answers) == 0 && len(lastStorySubject.GoTo) > 0 {
+	//	fmt.Println("Перерисовка. Найден goto")
+	//	lastStorySubject = story[lastStorySubject.GoTo]
+	//}
+
+	markup := tgbotapi.NewReplyKeyboard()
+
+	for _, button := range lastStorySubject.Answers {
+		row := []tgbotapi.KeyboardButton{{
+			Text:            button["title"],
+			RequestContact:  false,
+			RequestLocation: false,
+		}}
+		markup.Keyboard = append(markup.Keyboard, row)
+	}
+
+	markup.OneTimeKeyboard = true
+	msg.ReplyMarkup = &markup
+
+	bot.Send(msg)
 }
 
 func generateTextMessage(chatId int64, message string) tgbotapi.MessageConfig {
