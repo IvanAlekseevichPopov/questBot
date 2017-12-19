@@ -1,28 +1,4 @@
 {
-  "menu": {
-    "Monologue": [
-      "Добро пожаловать в игру"
-    ],
-    "Question": "Главное меню",
-    "Answers": [
-      {
-        "title": "Начать игру",
-        "postback": "first"
-      },
-      {
-        "title": "Помощь",
-        "postback": "help"
-      }
-    ],
-    "Prompt": "",
-    "GoTo": ""
-  },
-  "help": {
-    "Monologue": [
-      "Тут будет помощь"
-    ],
-    "GoTo": "menu"
-  },
   "first": {
     "Monologue": [
       "Здравствуйте!",
@@ -178,7 +154,7 @@
   },
   "make_photo": {
     "Monologue": [
-      "https:\/\/farm2.static.flickr.com\/1678\/25488504503_8d4af3d71b_b.jpg"
+      "content/images/lab_photo.jpg"
     ],
     "Question": "Здесь куча шкафов. На входе я подобрал фонарь и монтировку.",
     "Answers": [
@@ -207,7 +183,7 @@
   },
   "protective_suit_choice": {
     "Monologue": [
-      "https:\/\/drive.google.com\/file\/d\/1NJ4maFIdFUowEmvxPDOwlMpv7cILH1A7\/view?usp=sharing"
+      "content/images/danger-signs.jpg"
     ],
     "Question": "Везде пусто. Только в одном лежат какие-то костюмы с респираторами! На каждом свой значок. Какой мне нужен?",
     "Answers": [
@@ -287,7 +263,7 @@
       "Я посветил фонариком на схему на стене. Здесь есть генераторная, на один уровень ниже.",
       "Но как туда попасть?..",
       "Придумал! Здесь есть вентиляционные ходы, там можно пробираться пригнувшись. Я залезал в такой. Но там темно и много поворотов, я заблужусь...",
-      "https:\/\/i.pinimg.com\/736x\/cd\/b1\/5f\/cdb15f2687f951ad3c37ca4d31719d02--maze-design-ideas-simple-maze.jpg",
+      "content/images/maze.jpg",
       "Нужна помощь!"
     ],
     "GoTo": "labyrinth_start"
@@ -493,7 +469,7 @@
     "Monologue": [
       "Хорошо, подключил шланги, заправляется...",
       "О, чёрт... Что-то не так!",
-      "https:\/\/drive.google.com\/file\/d\/1T7FOe4LRAj9HnDSKoNhgwezsLFKjHZxX\/view?usp=sharing",
+      "content/sound/explosion.mp3",
       "Возможно, не стоило нажимать на кнопки наугад. Передохни, почитай статью о том, как работать с информацией осмысленно, и возвращайся. ",
       "https:\/\/newtonew.com\/science\/kak-rabotat-s-informaciey-osmyslenno"
     ],
@@ -542,10 +518,6 @@
   "exit": {
     "Question": "Игра окончена",
     "Answers": [
-      {
-        "title": "Выйти",
-        "postback": "finish"
-      },
       {
         "title": "Попробовать еще раз",
         "postback": "first"

@@ -7,12 +7,14 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
 //const testChatId int64 = 75808241
 const botToken = "347808432:AAFJQQOUDKCHFBaSxAbVCykyIMa-D9dCcE4"
+const questStartLink = "first"
 
 type storyIteration struct {
 	Monologue []string
@@ -63,6 +65,9 @@ func proceedMessage(chatId int64, messageFromUser string) {
 
 	fmt.Println(messageFromUser)
 	sess, err := sessionGet(chatId)
+	if messageFromUser == "/start" || messageFromUser == "start" || messageFromUser == "/logout" || messageFromUser == "logout" || messageFromUser == "/stop" {
+		err = true
+	}
 
 	if !err {
 		//Сессия найдена - продолжаем
@@ -94,8 +99,10 @@ func proceedMessage(chatId int64, messageFromUser string) {
 			showMonologue(chatId, currentStorySubject.Monologue)
 
 			isQuestionAsked := askQuestion(chatId, currentStorySubject)
+			fmt.Println("Результат вопроса", isQuestionAsked)
 			if !isQuestionAsked && len(currentStorySubject.GoTo) > 0 { //обработка чистого монолога и goto
-				redrawLastPosition(chatId, "12", story[currentStorySubject.GoTo])
+				fmt.Println("Обрабатываем GOTO")
+				redrawLastPosition(chatId, "_________________", story[currentStorySubject.GoTo])
 
 				sess = sessionSet(chatId, userSession{
 					Position: currentStorySubject.GoTo,
@@ -115,7 +122,7 @@ func proceedMessage(chatId int64, messageFromUser string) {
 		//sendStartMenu(chatId)
 		sessionStart(chatId)
 
-		startStoryPosition := story["menu"]
+		startStoryPosition := story[questStartLink]
 		showMonologue(chatId, startStoryPosition.Monologue)
 		askQuestion(chatId, startStoryPosition)
 	}
@@ -188,7 +195,7 @@ func getCurrentPosition(messageFromUser string, lastStorySubject storyIteration)
 func sessionStart(chatId int64) {
 	sessions[chatId] = userSession{
 		Lock:     false,
-		Position: "menu",
+		Position: questStartLink,
 	}
 }
 
@@ -203,20 +210,6 @@ func sessionSet(chatId int64, session userSession) userSession {
 	return session
 }
 
-//func sendStartMenu(chatId int64) {
-//	markup := tgbotapi.NewReplyKeyboard(
-//		tgbotapi.NewKeyboardButtonRow(
-//			tgbotapi.KeyboardButton{Text: "Начать игру"},
-//			tgbotapi.KeyboardButton{Text: "Перезапуск"},
-//		),
-//	)
-//	markup.OneTimeKeyboard = true
-//
-//	msg := tgbotapi.NewMessage(chatId, "Главное меню")
-//	msg.ReplyMarkup = &markup
-//	bot.Send(msg)
-//}
-
 func showMonologue(chatId int64, monologueCollection []string) {
 	for _, message := range monologueCollection {
 		var msg tgbotapi.Chattable
@@ -224,13 +217,13 @@ func showMonologue(chatId int64, monologueCollection []string) {
 		if strings.Contains(message, "images") {
 			msg = tgbotapi.NewPhotoUpload(chatId, message)
 		} else if strings.Contains(message, "sound") {
-			msg = tgbotapi.NewPhotoUpload(chatId, message)
+			msg = tgbotapi.NewAudioUpload(chatId, message)
 		} else {
 			msg = generateTextMessage(chatId, message)
 		}
 		bot.Send(msg)
 
-		//time.Sleep(time.Second * 1)
+		time.Sleep(time.Second * 1)
 	}
 }
 
@@ -263,22 +256,11 @@ func askQuestion(chatId int64, currentStoryPosition storyIteration) bool {
 	}
 
 	return false
-	//else if len(currentStoryPosition.GoTo) > 0 { //Только монолог и переход
-	//	fmt.Println("Нет вопросов. Есть Goto. Перерисовываем.. ")
-	//	redrawLastPosition(chatId, " ", story[currentStoryPosition.GoTo])
-	//}
 }
 
 func redrawLastPosition(chatId int64, message string, lastStorySubject storyIteration) {
 	//TODO половина кода повторяется с askQuestion - вынести общее в другую функцию
-	msg := tgbotapi.NewMessage(chatId, message)
-
-	//fmt.Println("Перерисовка изнутри. Answers", lastStorySubject.Answers)
-	//fmt.Println("Перерисовка изнутри. GoTo", lastStorySubject.GoTo)
-	//if len(lastStorySubject.Answers) == 0 && len(lastStorySubject.GoTo) > 0 {
-	//	fmt.Println("Перерисовка. Найден goto")
-	//	lastStorySubject = story[lastStorySubject.GoTo]
-	//}
+	msg := generateTextMessage(chatId, message)
 
 	markup := tgbotapi.NewReplyKeyboard()
 
@@ -305,18 +287,6 @@ func generateTextMessage(chatId int64, message string) tgbotapi.MessageConfig {
 	}
 
 	return tgbotapi.NewMessage(chatId, message)
-}
-
-func sendImage(chatId int64, imagePath string) {
-	msg := tgbotapi.NewPhotoUpload(chatId, imagePath)
-
-	bot.Send(msg)
-}
-
-func sendAudio(chatId int64, trackPath string) {
-	msg := tgbotapi.NewAudioUpload(chatId, trackPath)
-
-	bot.Send(msg)
 }
 
 func inArray(id int64, array map[int64]userSession) bool {
