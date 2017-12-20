@@ -9,10 +9,9 @@ import (
 	"strings"
 
 	"github.com/go-telegram-bot-api/telegram-bot-api"
+	"gopkg.in/yaml.v2"
 )
 
-//const testChatId int64 = 75808241
-const botToken = "347808432:AAFJQQOUDKCHFBaSxAbVCykyIMa-D9dCcE4"
 const questStartLink = "first"
 
 type storyIteration struct {
@@ -31,12 +30,20 @@ type userSession struct {
 	Lock     bool              //is user locked for runtime
 }
 
+type appConfig struct {
+	BotToken string `yaml:"bot_token"`
+	Env      string `yaml:"env"`
+}
+
 var bot *tgbotapi.BotAPI
 var story map[string]storyIteration
 var userAnswers map[string]string
 var sessions = make(map[int64]userSession)
+var config appConfig
 
 func init() {
+	loadConfig()
+
 	loadStory()
 	checkStory()
 
@@ -107,13 +114,17 @@ func proceedMessage(chatId int64, messageFromUser string) {
 			fmt.Println("isQuestionAsked - ", isQuestionAsked)
 
 			if !isQuestionAsked && len(currentStorySubject.GoTo) > 0 && len(currentStorySubject.CheckStuff) == 0 { //обработка чистого монолога и goto
-				redrawLastPosition(chatId, "...", story[currentStorySubject.GoTo]) //TODO если сообщение будет пустым - все сломается. Нельзя использовать redrawLastPos. Нужно написать еще один метод
+				redrawLastPosition(chatId, " ", story[currentStorySubject.GoTo]) //TODO если сообщение будет пустым - все сломается. Нельзя использовать redrawLastPos. Нужно написать еще один метод
 
+				postback = currentStorySubject.GoTo
+				currentStorySubject = story[postback]
 				sess = sessionSet(chatId, userSession{
-					Position: currentStorySubject.GoTo,
+					Position: postback,
 					Lock:     false,
 					Stuff:    sess.Stuff,
 				})
+
+				goto link
 			} else if !isQuestionAsked && len(currentStorySubject.CheckStuff) > 0 {
 				fmt.Println("Обработка проверки снаряжения")
 				userStuff := sess.Stuff
@@ -145,7 +156,6 @@ func proceedMessage(chatId int64, messageFromUser string) {
 		}
 	} else {
 		//Сессия не найдена - создаем новую, рисуем главное меню
-		//sendStartMenu(chatId)
 		sessionStart(chatId)
 
 		startStoryPosition := story[questStartLink]
@@ -153,15 +163,6 @@ func proceedMessage(chatId int64, messageFromUser string) {
 		askQuestion(chatId, startStoryPosition)
 	}
 }
-
-//func calcTypeOfBlock(messageFromUser string, lastStorySubject storyIteration, currentStorySubject storyIteration) string {
-//	if len(currentStorySubject.Prompt) > 0 {
-//		//Тип - запрос ввода
-//		return "prompt"
-//	} else if len(currentStorySubject.Stuff) > 0 && len(currentStorySubject.GoTo) > 0 { {
-//		return "asdf"
-//	}
-//}
 
 func userWantRestart(message string) bool {
 	return message == "/start" || message == "start" || message == "/logout" || message == "logout" || message == "/stop"
@@ -329,15 +330,6 @@ func generateTextMessage(chatId int64, message string) tgbotapi.MessageConfig {
 	return tgbotapi.NewMessage(chatId, message)
 }
 
-func inArray(id int64, array map[int64]userSession) bool {
-	for key := range array {
-		if key == id {
-			return true
-		}
-	}
-	return false
-}
-
 func loadStory() {
 	//bot.Debug = true
 	file, err := ioutil.ReadFile("./story.json")
@@ -368,10 +360,26 @@ func checkStory() {
 
 func initBot() {
 	err := error(nil)
-	bot, err = tgbotapi.NewBotAPI(botToken)
+	bot, err = tgbotapi.NewBotAPI(config.BotToken)
 	if err != nil {
 		log.Panic(err)
 	}
 
 	log.Printf("Authorized on account %s", bot.Self.UserName)
+}
+
+func loadConfig() {
+	file, err := ioutil.ReadFile("config.yml")
+	if err != nil {
+		log.Printf("Error opening config.yml: #%v ", err)
+		os.Exit(1)
+	}
+
+	err = yaml.Unmarshal(file, &config)
+	if err != nil {
+		log.Fatalf("Error reading config.yml: %v", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("%+v\n", config)
 }
