@@ -37,7 +37,6 @@ type appConfig struct {
 
 var bot *tgbotapi.BotAPI
 var story map[string]storyIteration
-var userAnswers map[string]string
 var sessions = make(map[int64]userSession)
 var config appConfig
 
@@ -339,14 +338,6 @@ func loadStory() {
 	}
 
 	json.Unmarshal(file, &story)
-
-	file, err = ioutil.ReadFile("./userAnswers.json")
-	if err != nil {
-		fmt.Printf("File error: %v\n", err)
-		os.Exit(1)
-	}
-
-	json.Unmarshal(file, &userAnswers)
 
 	log.Printf("Story is loaded")
 }
