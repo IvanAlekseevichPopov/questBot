@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/go-telegram-bot-api/telegram-bot-api"
 	"gopkg.in/yaml.v2"
@@ -264,7 +263,7 @@ func showMonologue(chatId int64, monologueCollection []string) {
 		}
 		bot.Send(msg)
 
-		time.Sleep(time.Second * 1)
+		//time.Sleep(time.Second * 1)
 	}
 }
 
