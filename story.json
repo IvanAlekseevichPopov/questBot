@@ -9,7 +9,7 @@
     "Answers": [
       {
         "title": "Стоп, кто это?",
-        "postback": "cupboard_opened"
+        "postback": "meeting"
       },
       {
         "title": "Я на связи",
