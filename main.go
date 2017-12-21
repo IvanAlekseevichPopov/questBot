@@ -455,7 +455,7 @@ func loadSessions(fileName string) {
 		c := b.Cursor()
 
 		for k, v := c.First(); k != nil; k, v = c.Next() {
-			chatId, err := strconv.ParseInt(string(k), 10, 64)
+			chatId, err := strconv.ParseInt(string(k), 10, 64) //TODO нормальная конвертация в int64
 			if nil != err {
 				return err
 			}
