@@ -6,13 +6,18 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 
+	"time"
+
+	"github.com/boltdb/bolt"
 	"github.com/go-telegram-bot-api/telegram-bot-api"
 	"gopkg.in/yaml.v2"
 )
 
 const questStartLink = "first"
+const sessionsBucketName = "user_sessions"
 
 type storyIteration struct {
 	Monologue  []string
@@ -25,9 +30,10 @@ type storyIteration struct {
 }
 
 type userSession struct {
-	Stuff    map[string]string //Shoulder bag
-	Position string            //Position in user story
-	Lock     bool              //is user locked for runtime
+	Stuff     map[string]string //Shoulder bag
+	Position  string            //Position in user story
+	Lock      bool              //is user locked for runtime
+	UpdatedAt time.Time         //For cron flushes, user reminders
 }
 
 type appConfig struct {
@@ -41,7 +47,8 @@ var sessions = make(map[int64]userSession)
 var config appConfig
 
 func init() {
-	loadConfig()
+	loadConfig("config.yml")    //TODO in execution parameter
+	loadSessions("sessions.db") //TODO in execution parameter
 
 	loadStory()
 	checkStory()
@@ -234,15 +241,16 @@ func getCurrentPosition(messageFromUser string, lastStorySubject storyIteration)
 
 func sessionStart(chatId int64) {
 	sessions[chatId] = userSession{
-		Lock:     false,
-		Position: questStartLink,
+		Lock:      false,
+		Position:  questStartLink,
+		UpdatedAt: time.Now(),
 	}
 }
 
 func sessionGet(chatId int64) (userSession, bool) {
 	session, err := sessions[chatId]
 	return session, !err
-	//return sessions[chatId]
+	//TODO если сессия не найдена в рантайме - запрашиваем бд
 }
 
 func sessionSet(chatId int64, session userSession) userSession {
@@ -359,18 +367,114 @@ func initBot() {
 	log.Printf("Authorized on account %s", bot.Self.UserName)
 }
 
-func loadConfig() {
-	file, err := ioutil.ReadFile("config.yml")
+func loadConfig(fileName string) {
+	file, err := ioutil.ReadFile(fileName)
 	if err != nil {
-		log.Printf("Error opening config.yml: #%v ", err)
+		log.Printf("Error opening %s: #%v ", fileName, err)
 		os.Exit(1)
 	}
 
 	err = yaml.Unmarshal(file, &config)
 	if err != nil {
-		log.Fatalf("Error reading config.yml: %v", err)
+		log.Fatalf("Error reading %s: %v", fileName, err)
 		os.Exit(1)
 	}
 
 	fmt.Printf("%+v\n", config)
+}
+
+func flushSessionToDb(chatId int64, sess userSession) {
+	//отправляем сессию в канал.
+	//Слушатель уже будет разгребать и сохранять сессии
+}
+
+func loadSessions(fileName string) {
+	//Инициализируем БД
+	db, err := bolt.Open(fileName, 0600, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer db.Close()
+
+	//Инициализируем корзину
+	err = db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte(sessionsBucketName))
+
+		return err
+
+	})
+
+	if nil != err {
+		fmt.Println("create bucket err", err)
+		os.Exit(1)
+	}
+
+	//err = db.Update(func(tx *bolt.Tx) error {
+	//	b := tx.Bucket([]byte(sessionsBucketName))
+	//
+	//	for i := 1; i < 10; i++ {
+	//		sess := userSession{
+	//			Stuff:     make(map[string]string),
+	//			Lock:      false,
+	//			UpdatedAt: time.Now(),
+	//			Position:  "first",
+	//		}
+	//		fmt.Println(sess)
+	//
+	//		buf, err := json.Marshal(sess)
+	//		fmt.Println("marshal error - ", err)
+	//
+	//		err = b.Put([]byte(strconv.Itoa(i)), buf)
+	//		fmt.Println("Put to bucket err - ", err)
+	//	}
+	//
+	//	return nil //TODO return err
+	//})
+
+	//db.View(func(tx *bolt.Tx) error {
+	//	b := tx.Bucket([]byte(sessionsBucketName))
+	//	fmt.Println("bucket - ", b.FillPercent)
+	//
+	//	v := b.Get([]byte("1"))
+	//	fmt.Printf("The answer is: %s\n", v)
+	//
+	//	sess := new(userSession)
+	//	err := json.Unmarshal(v, &sess)
+	//
+	//	fmt.Println("error unmarshal", err)
+	//	fmt.Println("sess", sess)
+	//
+	//	return nil
+	//})
+
+	db.View(func(tx *bolt.Tx) error {
+		// Assume bucket exists and has keys
+		b := tx.Bucket([]byte(sessionsBucketName))
+
+		c := b.Cursor()
+
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			chatId, err := strconv.ParseInt(string(k), 10, 64)
+			if nil != err {
+				return err
+			}
+
+			sess := new(userSession)
+			err = json.Unmarshal(v, &sess)
+
+			fmt.Printf("key=%v value=%v\n", chatId, *sess)
+			if nil != err {
+				return err
+			}
+
+			sessions[chatId] = *sess
+		}
+
+		return nil
+	})
+
+	//for key, value := range sessions {
+	//	fmt.Println("Key:", key, "Value:", value)
+	//}
 }
