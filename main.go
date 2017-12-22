@@ -19,6 +19,12 @@ import (
 const questStartLink = "first"
 const sessionsBucketName = "user_sessions"
 
+const blockTypeUserInput = 1    //Блок ожидания пользовательского ввода
+const blockTypeAnswerChoice = 2 //Блок выбора ответа
+const blockTypeGetStuff = 3     //Блок пополнения снаряжения
+const blockTypeCheckStuff = 4   //Блок проверки необходимого сняряжения
+const blockTypeShowMessage = 5  //Блок показа сообщения и преход по GoTo
+
 type storyIteration struct {
 	Monologue  []string
 	Question   string
@@ -47,8 +53,8 @@ var sessions = make(map[int64]userSession)
 var config appConfig
 
 func init() {
-	loadConfig("config.yml")    //TODO in execution parameter
-	loadSessions("sessions.db") //TODO in execution parameter
+	loadConfig("config.yml") //TODO in execution parameter
+	//loadSessions("sessions.db") //TODO in execution parameter
 
 	loadStory()
 	checkStory()
@@ -70,11 +76,11 @@ func main() {
 			continue
 		}
 
-		proceedMessage(update.Message.Chat.ID, update.Message.Text)
+		proceedMessageV2(update.Message.Chat.ID, update.Message.Text)
 	}
 }
 
-func proceedMessage(chatId int64, messageFromUser string) {
+func proceedMessageV2(chatId int64, messageFromUser string) {
 
 	fmt.Println(messageFromUser)
 	sess, err := sessionGet(chatId)
@@ -83,81 +89,104 @@ func proceedMessage(chatId int64, messageFromUser string) {
 	}
 
 	if !err {
-
 		if sess.Lock {
 			fmt.Println("Заблокирован ввод пользователя")
-			msg := tgbotapi.NewMessage(chatId, "Ввод заблокирован")
-			bot.Send(msg)
-		} else {
-			fmt.Println(sess)
-			lastStorySubject := story[sess.Position]
+			return
+		}
 
-			currentStorySubject, postback, err := getCurrentPosition(messageFromUser, lastStorySubject)
-			if len(err) > 0 { //Пишем ошибку и перерисовываем кнопки
-				redrawLastPosition(chatId, err, lastStorySubject)
+		lastStorySubject := story[sess.Position]
+		currentStorySubject, postback, err := getCurrentPosition(messageFromUser, lastStorySubject)
+		if len(err) > 0 {
+			redrawLastPosition(chatId, err, lastStorySubject)
+			return
+		}
 
-				return
+		sess = sessionSet(chatId, userSession{ //TODO передача по ссылке, передаем только изменяемый параметр
+			Position:  postback,
+			Lock:      true,
+			Stuff:     sess.Stuff,
+			UpdatedAt: time.Now(),
+		})
+
+		//Количество переходов по истории без участия пользователя
+		for i := 0; i < 3; i++ {
+			fmt.Println(sess.Stuff)
+			if proceedPrompt(messageFromUser, lastStorySubject, &sess) {
+				fmt.Println("Записали в stuff")
+				sess = sessionSet(chatId, userSession{
+					Position:  postback,
+					Lock:      true,
+					Stuff:     sess.Stuff,
+					UpdatedAt: time.Now(),
+				})
 			}
 
-			//typeOfBlock := calcTypeOfBlock(messageFromUser, lastStorySubject, currentStorySubject)
-			//Типы блоков: Запрос ввода, Выбор ответа, Взять Stuff, Проверить Stuff
-			//TODO Тип блока указывать в story.json
-			//TODO и ему сопоставить необходимые поля
-
-			proceedPrompt(messageFromUser, lastStorySubject, &sess)
-			proceedStuff(&postback, &currentStorySubject, &sess)
-
-		link:
-			sess = sessionSet(chatId, userSession{ //TODO передача по ссылке, передаем только изменяемый параметр
-				Position: postback,
-				Lock:     true,
-				Stuff:    sess.Stuff,
-			})
-
-			showMonologue(chatId, currentStorySubject.Monologue)
-
-			isQuestionAsked := askQuestion(chatId, currentStorySubject)
-			fmt.Println("isQuestionAsked - ", isQuestionAsked)
-
-			if !isQuestionAsked && len(currentStorySubject.GoTo) > 0 && len(currentStorySubject.CheckStuff) == 0 { //обработка чистого монолога и goto
-				redrawLastPosition(chatId, " ", story[currentStorySubject.GoTo]) //TODO если сообщение будет пустым - все сломается. Нельзя использовать redrawLastPos. Нужно написать еще один метод
-
-				postback = currentStorySubject.GoTo
-				currentStorySubject = story[postback]
+			typeOfBlock := getTypeOfBlock(messageFromUser, lastStorySubject, currentStorySubject)
+			switch typeOfBlock {
+			case blockTypeUserInput:
+				showMonologue(chatId, currentStorySubject.Monologue)
+				fmt.Println("Ожидание пользовательского ввода")
+				askQuestion(chatId, currentStorySubject)
 				sess = sessionSet(chatId, userSession{
-					Position: postback,
-					Lock:     false,
-					Stuff:    sess.Stuff,
+					Position:  postback,
+					Lock:      false,
+					Stuff:     sess.Stuff,
+					UpdatedAt: time.Now(),
 				})
+				return
 
-				goto link
-			} else if !isQuestionAsked && len(currentStorySubject.CheckStuff) > 0 {
-				fmt.Println("Обработка проверки снаряжения")
-				userStuff := sess.Stuff
-				fmt.Println(userStuff)
-				for item, failGoTo := range currentStorySubject.CheckStuff {
-					_, stuffExist := userStuff[item]
-					if !stuffExist {
-						postback = failGoTo
-						currentStorySubject = story[postback]
-						fmt.Println("fail card goto")
+			case blockTypeAnswerChoice:
+				fmt.Println("Выбор ответа")
+				showMonologue(chatId, currentStorySubject.Monologue)
+				askQuestion(chatId, currentStorySubject)
+				sess = sessionSet(chatId, userSession{
+					Position:  postback,
+					Lock:      false,
+					Stuff:     sess.Stuff,
+					UpdatedAt: time.Now(),
+				})
+				return
 
-						goto link //TODO выпилить это Г.
-					}
+			case blockTypeGetStuff:
+				fmt.Println("Берем вещь и идем дальше")
+				showMonologue(chatId, currentStorySubject.Monologue)
+				proceedPutStuff(&postback, &currentStorySubject, &sess)
+				sess = sessionSet(chatId, userSession{
+					Position:  postback,
+					Lock:      false,
+					Stuff:     sess.Stuff,
+					UpdatedAt: time.Now(),
+				})
+				continue
+
+			case blockTypeCheckStuff:
+				fmt.Println("Есть ли нужное барахло")
+				showMonologue(chatId, currentStorySubject.Monologue)
+				proceedCheckStuff(&postback, &currentStorySubject, &sess)
+				continue
+
+			case blockTypeShowMessage:
+				fmt.Println("Зачитал и перешел на вопрос. Переносит question в следующую итерацию")
+
+				monologue := currentStorySubject.Monologue
+				question := monologue[len(monologue)-1]
+
+				sess.Position = postback
+				postback = currentStorySubject.GoTo
+				lastStorySubject = currentStorySubject
+				currentStorySubject = story[postback]
+				currentStorySubject.Question = question
+
+				if len(monologue) <= 1 { //todo добавляем к существующему, а не заменяем
+					currentStorySubject.Monologue = []string{}
+				} else {
+					currentStorySubject.Monologue = monologue[:len(monologue)-1]
 				}
 
-				postback = currentStorySubject.GoTo
-				currentStorySubject = story[postback]
-				fmt.Println("success card goto")
+				//fmt.Printf("+%v\n", currentStorySubject)
+				//fmt.Printf("+%v\n", story[postback])
 
-				goto link //TODO выпилить это Г.
-
-			} else {
-				sessionSet(chatId, userSession{
-					Position: postback,
-					Lock:     false,
-					Stuff:    sess.Stuff,
-				})
+				continue
 			}
 		}
 	} else {
@@ -169,12 +198,53 @@ func proceedMessage(chatId int64, messageFromUser string) {
 		askQuestion(chatId, startStoryPosition)
 	}
 }
+func proceedCheckStuff(postback *string, currentStoryBlock *storyIteration, sess *userSession) {
+	userStuff := sess.Stuff
+
+	for item, failGoTo := range currentStoryBlock.CheckStuff {
+		_, stuffExist := userStuff[item]
+		if !stuffExist {
+			*postback = failGoTo
+			*currentStoryBlock = story[*postback]
+			fmt.Println("fail card goto")
+			return
+		}
+	}
+
+	sess.Position = *postback
+	*postback = currentStoryBlock.GoTo
+	*currentStoryBlock = story[*postback]
+	fmt.Println("success card goto")
+}
+
+func getTypeOfBlock(messageFromUser string, lastStoryBlock storyIteration, currentStoryBlock storyIteration) int {
+	fmt.Println("typeofblock", currentStoryBlock)
+	if len(currentStoryBlock.Question) > 0 {
+		if len(currentStoryBlock.Answers) > 0 { //Выбор готового решения
+			return blockTypeAnswerChoice
+		} else if len(currentStoryBlock.Prompt) > 0 { // Ожидание ввода от пользователя {
+			return blockTypeUserInput
+		}
+	} else if len(currentStoryBlock.GoTo) > 0 {
+		if len(currentStoryBlock.Stuff) > 0 {
+			return blockTypeGetStuff
+		} else if len(currentStoryBlock.CheckStuff) > 0 {
+			return blockTypeCheckStuff
+		} else if len(currentStoryBlock.Monologue) > 0 {
+			return blockTypeShowMessage
+		}
+	}
+
+	log.Println("Блок с неизвестным назначением", currentStoryBlock)
+	os.Exit(1)
+	return 1
+}
 
 func userWantRestart(message string) bool {
 	return message == "/start" || message == "start" || message == "/logout" || message == "logout" || message == "/stop"
 }
 
-func proceedStuff(postback *string, currentStoryObject *storyIteration, sess *userSession) {
+func proceedPutStuff(postback *string, currentStoryObject *storyIteration, sess *userSession) {
 	if len(currentStoryObject.Stuff) > 0 && len(currentStoryObject.GoTo) > 0 {
 		//Берем stuff и сдвигаем вперед сессию
 		if nil == sess.Stuff {
@@ -188,14 +258,17 @@ func proceedStuff(postback *string, currentStoryObject *storyIteration, sess *us
 	}
 }
 
-func proceedPrompt(userMessage string, lastStorySubject storyIteration, sess *userSession) {
+func proceedPrompt(userMessage string, lastStorySubject storyIteration, sess *userSession) bool {
 	if len(lastStorySubject.Prompt) > 0 {
 		if nil == sess.Stuff {
 			sess.Stuff = make(map[string]string)
 		}
 
 		sess.Stuff[lastStorySubject.Prompt] = userMessage
+		return true
 	}
+
+	return false
 }
 
 func getCurrentPosition(messageFromUser string, lastStorySubject storyIteration) (storyIteration, string, string) {
@@ -275,35 +348,26 @@ func showMonologue(chatId int64, monologueCollection []string) {
 	}
 }
 
-func askQuestion(chatId int64, currentStoryPosition storyIteration) bool {
-	if len(currentStoryPosition.Question) > 0 {
-		msg := generateTextMessage(chatId, currentStoryPosition.Question)
+func askQuestion(chatId int64, currentStoryPosition storyIteration) {
+	msg := generateTextMessage(chatId, currentStoryPosition.Question)
 
-		if len(currentStoryPosition.Answers) > 0 { // Выбор из готового ответа
+	if len(currentStoryPosition.Answers) > 0 { // Выбор из готового ответа
 
-			markup := tgbotapi.NewReplyKeyboard()
-			for _, button := range currentStoryPosition.Answers {
-				row := []tgbotapi.KeyboardButton{{
-					Text:            button["title"],
-					RequestContact:  false,
-					RequestLocation: false,
-				}}
-				markup.Keyboard = append(markup.Keyboard, row)
-			}
-
-			markup.OneTimeKeyboard = true
-			msg.ReplyMarkup = &markup
-
-		} else if len(currentStoryPosition.Prompt) > 0 { // Ожидание ввода от пользователя
-			//TODO Ждем ввода имени иль ничего не делаем
-
+		markup := tgbotapi.NewReplyKeyboard()
+		for _, button := range currentStoryPosition.Answers {
+			row := []tgbotapi.KeyboardButton{{
+				Text:            button["title"],
+				RequestContact:  false,
+				RequestLocation: false,
+			}}
+			markup.Keyboard = append(markup.Keyboard, row)
 		}
 
-		bot.Send(msg)
-		return true
+		markup.OneTimeKeyboard = true
+		msg.ReplyMarkup = &markup
 	}
 
-	return false
+	bot.Send(msg)
 }
 
 func redrawLastPosition(chatId int64, message string, lastStorySubject storyIteration) {
@@ -448,6 +512,7 @@ func loadSessions(fileName string) {
 	//	return nil
 	//})
 
+	//Заполнение сессий из БД
 	db.View(func(tx *bolt.Tx) error {
 		// Assume bucket exists and has keys
 		b := tx.Bucket([]byte(sessionsBucketName))
@@ -473,8 +538,100 @@ func loadSessions(fileName string) {
 
 		return nil
 	})
-
-	//for key, value := range sessions {
-	//	fmt.Println("Key:", key, "Value:", value)
-	//}
 }
+
+//func proceedMessage(chatId int64, messageFromUser string) {
+//
+//	fmt.Println(messageFromUser)
+//	sess, err := sessionGet(chatId)
+//	if userWantRestart(messageFromUser) {
+//		err = true
+//	}
+//
+//	if !err {
+//
+//		if sess.Lock {
+//			fmt.Println("Заблокирован ввод пользователя")
+//			msg := tgbotapi.NewMessage(chatId, "Ввод заблокирован")
+//			bot.Send(msg)
+//		} else {
+//			fmt.Println(sess)
+//			lastStorySubject := story[sess.Position]
+//
+//			currentStorySubject, postback, err := getCurrentPosition(messageFromUser, lastStorySubject)
+//			if len(err) > 0 { //Пишем ошибку и перерисовываем кнопки
+//				redrawLastPosition(chatId, err, lastStorySubject)
+//
+//				return
+//			}
+//
+//			//typeOfBlock := calcTypeOfBlock(messageFromUser, lastStorySubject, currentStorySubject)
+//			//Типы блоков: Запрос ввода, Выбор ответа, Взять Stuff, Проверить Stuff
+//			//TODO Тип блока указывать в story.json
+//			//TODO и ему сопоставить необходимые поля
+//
+//			proceedPrompt(messageFromUser, lastStorySubject, &sess)
+//			proceedPutStuff(&postback, &currentStorySubject, &sess)
+//
+//		link:
+//			sess = sessionSet(chatId, userSession{ //TODO передача по ссылке, передаем только изменяемый параметр
+//				Position: postback,
+//				Lock:     true,
+//				Stuff:    sess.Stuff,
+//			})
+//
+//			showMonologue(chatId, currentStorySubject.Monologue)
+//
+//			isQuestionAsked := askQuestion(chatId, currentStorySubject)
+//			fmt.Println("isQuestionAsked - ", isQuestionAsked)
+//
+//			if !isQuestionAsked && len(currentStorySubject.GoTo) > 0 && len(currentStorySubject.CheckStuff) == 0 { //обработка чистого монолога и goto
+//				redrawLastPosition(chatId, " ", story[currentStorySubject.GoTo]) //TODO если сообщение будет пустым - все сломается. Нельзя использовать redrawLastPos. Нужно написать еще один метод
+//
+//				postback = currentStorySubject.GoTo
+//				currentStorySubject = story[postback]
+//				sess = sessionSet(chatId, userSession{
+//					Position: postback,
+//					Lock:     false,
+//					Stuff:    sess.Stuff,
+//				})
+//
+//				goto link
+//			} else if !isQuestionAsked && len(currentStorySubject.CheckStuff) > 0 {
+//				fmt.Println("Обработка проверки снаряжения")
+//				userStuff := sess.Stuff
+//				fmt.Println(userStuff)
+//				for item, failGoTo := range currentStorySubject.CheckStuff {
+//					_, stuffExist := userStuff[item]
+//					if !stuffExist {
+//						postback = failGoTo
+//						currentStorySubject = story[postback]
+//						fmt.Println("fail card goto")
+//
+//						goto link //TODO выпилить это Г.
+//					}
+//				}
+//
+//				postback = currentStorySubject.GoTo
+//				currentStorySubject = story[postback]
+//				fmt.Println("success card goto")
+//
+//				goto link //TODO выпилить это Г.
+//
+//			} else {
+//				sessionSet(chatId, userSession{
+//					Position: postback,
+//					Lock:     false,
+//					Stuff:    sess.Stuff,
+//				})
+//			}
+//		}
+//	} else {
+//		//Сессия не найдена - создаем новую, рисуем главное меню
+//		sessionStart(chatId)
+//
+//		startStoryPosition := story[questStartLink]
+//		showMonologue(chatId, startStoryPosition.Monologue)
+//		askQuestion(chatId, startStoryPosition)
+//	}
+//}
