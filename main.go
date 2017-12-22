@@ -177,11 +177,13 @@ func proceedMessageV2(chatId int64, messageFromUser string) {
 				currentStorySubject = story[postback]
 				currentStorySubject.Question = question
 
-				if len(monologue) <= 1 { //todo добавляем к существующему, а не заменяем
-					currentStorySubject.Monologue = []string{}
+				if len(monologue) <= 1 {
+					monologue = []string{}
+
 				} else {
-					currentStorySubject.Monologue = monologue[:len(monologue)-1]
+					monologue = monologue[:len(monologue)-1]
 				}
+				currentStorySubject.Monologue
 
 				//fmt.Printf("+%v\n", currentStorySubject)
 				//fmt.Printf("+%v\n", story[postback])
