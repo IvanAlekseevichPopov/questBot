@@ -561,7 +561,7 @@
     "GoTo": "open_cupboard"
   },
   "open_cupboard": {
-    "Question": ".",
+    "Question": "Может тут что-нибудь спросим???",
     "Answers": [
       {
         "title": "Отлично, открывай шкаф.",
@@ -680,7 +680,7 @@
       },
       {
         "title": "Мухи.",
-        "postback": "right_fruit_fly"
+        "postback": "injection_question"
       }
     ]
   },
@@ -688,9 +688,9 @@
     "Monologue": [
       "А вот и нет, тут фотографии мух."
     ],
-    "GoTo": "right_fruit_fly"
+    "GoTo": "injection_question"
   },
-  "right_fruit_fly": {
+  "injection_question": {
     "Monologue": [
       "Ну надо же!",
       "Так, мне очень плохо! Остаётся только надеяться, что это обратимо.",
@@ -787,7 +787,8 @@
       "content/images/sarcofag_photo.jpg",
       "Нам тоже жаль с тобой расставаться. Чтобы подсластить пилюлю, почитай статью о том, как держать себя в руках",
       "https://newtonew.com/lifehack/cognitive-control-and-marshmallow"
-    ]
+    ],
+    "GoTo": "exit"
   },
   "exit": {
     "Question": "Игра окончена",
