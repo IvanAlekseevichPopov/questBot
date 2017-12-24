@@ -6,12 +6,10 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"strconv"
 	"strings"
 
 	"time"
 
-	"github.com/boltdb/bolt"
 	"github.com/go-telegram-bot-api/telegram-bot-api"
 	"gopkg.in/yaml.v2"
 )
@@ -21,7 +19,7 @@ const sessionsBucketName = "user_sessions"
 
 const blockTypeUserInput = 1    //Блок ожидания пользовательского ввода
 const blockTypeAnswerChoice = 2 //Блок выбора ответа
-const blockTypeGetStuff = 3     //Блок пополнения снаряжения
+const blockTypePutStuff = 3     //Блок пополнения снаряжения
 const blockTypeCheckStuff = 4   //Блок проверки необходимого сняряжения
 const blockTypeShowMessage = 5  //Блок показа сообщения и преход по GoTo
 
@@ -35,13 +33,6 @@ type storyIteration struct {
 	CheckStuff map[string]string
 }
 
-type userSession struct {
-	Stuff     map[string]string //Shoulder bag
-	Position  string            //Position in user story
-	Lock      bool              //is user locked for runtime
-	UpdatedAt time.Time         //For cron flushes, user reminders
-}
-
 type appConfig struct {
 	BotToken string `yaml:"bot_token"`
 	Env      string `yaml:"env"`
@@ -49,12 +40,11 @@ type appConfig struct {
 
 var bot *tgbotapi.BotAPI
 var story map[string]storyIteration
-var sessions = make(map[int64]userSession)
 var config appConfig
 
 func init() {
-	loadConfig("config.yml") //TODO in execution parameter
-	//loadSessions("sessions.db") //TODO in execution parameter
+	loadConfig("config.yml")    //TODO in execution parameter
+	loadSessions("sessions.db") //TODO in execution parameter
 
 	loadStory()
 	checkStory()
@@ -83,42 +73,40 @@ func main() {
 func proceedMessage(chatId int64, messageFromUser string) {
 
 	fmt.Println(messageFromUser)
-	sess, err := sessionGet(chatId)
-	if userWantRestart(messageFromUser) {
-		err = true
-	}
 
-	if !err {
-		if sess.Lock {
+	session := sessions.get(chatId)
+	fmt.Printf("%+v\n\n", session)
+
+	if userWantRestart(messageFromUser) {
+		session.setPosition(questStartLink)
+		session.setWorking(true)
+
+		startStoryPosition := story[questStartLink]
+		showMonologue(chatId, startStoryPosition.Monologue)
+		askQuestion(chatId, startStoryPosition)
+
+		session.setWorking(false)
+	} else {
+		if session.IsWorking {
 			fmt.Println("Заблокирован ввод пользователя")
 			return
 		}
 
-		lastStorySubject := story[sess.Position]
+		lastStorySubject := story[session.Position]
 		currentStorySubject, postback, err := getCurrentPosition(messageFromUser, lastStorySubject)
+
 		if len(err) > 0 {
 			redrawLastPosition(chatId, err, lastStorySubject)
 			return
 		}
 
-		sess = sessionSet(chatId, userSession{ //TODO передача по ссылке, передаем только изменяемый параметр
-			Position:  postback,
-			Lock:      true,
-			Stuff:     sess.Stuff,
-			UpdatedAt: time.Now(),
-		})
+		session.setWorking(true) //Заблокировали ввод пользователя
 
 		//Количество переходов по истории без участия пользователя
 		for i := 0; i < 3; i++ {
-			fmt.Println(sess.Stuff)
-			if proceedPrompt(messageFromUser, lastStorySubject, &sess) {
+			fmt.Println(session.Stuff)
+			if proceedPrompt(messageFromUser, lastStorySubject, session) {
 				fmt.Println("Записали в stuff")
-				sess = sessionSet(chatId, userSession{
-					Position:  postback,
-					Lock:      true,
-					Stuff:     sess.Stuff,
-					UpdatedAt: time.Now(),
-				})
 			}
 
 			typeOfBlock := getTypeOfBlock(messageFromUser, lastStorySubject, currentStorySubject)
@@ -127,71 +115,53 @@ func proceedMessage(chatId int64, messageFromUser string) {
 				showMonologue(chatId, currentStorySubject.Monologue)
 				fmt.Println("Ожидание пользовательского ввода")
 				askQuestion(chatId, currentStorySubject)
-				sess = sessionSet(chatId, userSession{
-					Position:  postback,
-					Lock:      false,
-					Stuff:     sess.Stuff,
-					UpdatedAt: time.Now(),
-				})
+
+				session.setPosition(postback)
+				session.setWorking(false)
 				return
 
 			case blockTypeAnswerChoice:
 				fmt.Println("Выбор ответа")
+
 				showMonologue(chatId, currentStorySubject.Monologue)
 				askQuestion(chatId, currentStorySubject)
-				sess = sessionSet(chatId, userSession{
-					Position:  postback,
-					Lock:      false,
-					Stuff:     sess.Stuff,
-					UpdatedAt: time.Now(),
-				})
+
+				session.setPosition(postback)
+				session.setWorking(false)
 				return
 
-			case blockTypeGetStuff:
+			case blockTypePutStuff:
 				fmt.Println("Берем вещь и идем дальше")
 				showMonologue(chatId, currentStorySubject.Monologue)
-				proceedPutStuff(&postback, &currentStorySubject, &sess)
-				sess = sessionSet(chatId, userSession{
-					Position:  postback,
-					Lock:      false,
-					Stuff:     sess.Stuff,
-					UpdatedAt: time.Now(),
-				})
+				proceedPutStuff(&postback, &currentStorySubject, session)
+
+				session.setPosition(postback)
 				continue
 
 			case blockTypeCheckStuff:
 				fmt.Println("Есть ли нужное барахло")
 				showMonologue(chatId, currentStorySubject.Monologue)
-				proceedCheckStuff(&postback, &currentStorySubject, &sess)
+				proceedCheckStuff(&postback, &currentStorySubject, session)
+
 				continue
 
 			case blockTypeShowMessage:
 				fmt.Println("Зачитал и перешел на вопрос. Переносит question в следующую итерацию")
 
-				sess.Position = postback
+				session.setPosition(postback)
+
 				postback = currentStorySubject.GoTo
 				lastStorySubject = currentStorySubject
 				currentStorySubject = story[postback]
 
 				mergeStoryBlocks(&currentStorySubject, &lastStorySubject)
-
-				//fmt.Printf("Текущий блок: %+v\n", lastStorySubject)
-				//fmt.Printf("Следущий блок:  %+v\n", currentStorySubject)
-
 				continue
 			}
 		}
-	} else {
-		//Сессия не найдена - создаем новую, рисуем главное меню
-		sessionStart(chatId)
-
-		startStoryPosition := story[questStartLink]
-		showMonologue(chatId, startStoryPosition.Monologue)
-		askQuestion(chatId, startStoryPosition)
 	}
 }
 
-func proceedCheckStuff(postback *string, currentStoryBlock *storyIteration, sess *userSession) {
+func proceedCheckStuff(postback *string, currentStoryBlock *storyIteration, sess *UserSession) {
 	userStuff := sess.Stuff
 
 	for item, failGoTo := range currentStoryBlock.CheckStuff {
@@ -204,14 +174,13 @@ func proceedCheckStuff(postback *string, currentStoryBlock *storyIteration, sess
 		}
 	}
 
-	sess.Position = *postback
+	sess.setPosition(*postback)
 	*postback = currentStoryBlock.GoTo
 	*currentStoryBlock = story[*postback]
 	fmt.Println("success card goto")
 }
 
 func getTypeOfBlock(messageFromUser string, lastStoryBlock storyIteration, currentStoryBlock storyIteration) int {
-	fmt.Println("typeofblock", currentStoryBlock)
 	if len(currentStoryBlock.GoTo) == 0 {
 		if len(currentStoryBlock.Answers) > 0 && len(currentStoryBlock.Question) > 0 { //Выбор готового решения
 			return blockTypeAnswerChoice
@@ -220,7 +189,7 @@ func getTypeOfBlock(messageFromUser string, lastStoryBlock storyIteration, curre
 		if len(currentStoryBlock.Prompt) > 0 { // Ожидание ввода от пользователя
 			return blockTypeUserInput
 		} else if len(currentStoryBlock.Stuff) > 0 { //Ложим что-то в заплечный мешок
-			return blockTypeGetStuff
+			return blockTypePutStuff
 		} else if len(currentStoryBlock.CheckStuff) > 0 { //Проверка сняряги
 			return blockTypeCheckStuff
 		} else if len(currentStoryBlock.Monologue) > 0 { // Зачитывем монолог и переходим
@@ -237,27 +206,27 @@ func userWantRestart(message string) bool {
 	return message == "/start" || message == "start" || message == "/logout" || message == "logout" || message == "/stop"
 }
 
-func proceedPutStuff(postback *string, currentStoryObject *storyIteration, sess *userSession) {
+func proceedPutStuff(postback *string, currentStoryObject *storyIteration, session *UserSession) {
 	if len(currentStoryObject.Stuff) > 0 && len(currentStoryObject.GoTo) > 0 {
 		//Берем stuff и сдвигаем вперед сессию
-		if nil == sess.Stuff {
-			sess.Stuff = make(map[string]string)
+		if nil == session.Stuff {
+			session.Stuff = make(map[string]string)
 		}
 
-		sess.Stuff[currentStoryObject.Stuff] = "true"
+		session.addStuff(currentStoryObject.Stuff, "1")
 
 		*postback = currentStoryObject.GoTo
 		*currentStoryObject = story[currentStoryObject.GoTo]
 	}
 }
 
-func proceedPrompt(userMessage string, lastStorySubject storyIteration, sess *userSession) bool {
+func proceedPrompt(userMessage string, lastStorySubject storyIteration, session *UserSession) bool {
 	if len(lastStorySubject.Prompt) > 0 {
-		if nil == sess.Stuff {
-			sess.Stuff = make(map[string]string)
+		if nil == session.Stuff {
+			session.Stuff = make(map[string]string)
 		}
 
-		sess.Stuff[lastStorySubject.Prompt] = userMessage
+		session.addStuff(lastStorySubject.Prompt, userMessage)
 		return true
 	}
 
@@ -265,8 +234,6 @@ func proceedPrompt(userMessage string, lastStorySubject storyIteration, sess *us
 }
 
 func getCurrentPosition(messageFromUser string, lastStorySubject storyIteration) (storyIteration, string, string) {
-	//fmt.Println("Ищем текущую итерацию.Последняя: ", lastStorySubject)
-
 	if len(lastStorySubject.Answers) > 0 {
 		//Проверяем, если предыдущая итерация закончилась выбором ответа
 		var postback string
@@ -305,25 +272,6 @@ func getCurrentPosition(messageFromUser string, lastStorySubject storyIteration)
 	return storyIteration{}, "", "Alert! Error! Unknown user reaction"
 }
 
-func sessionStart(chatId int64) {
-	sessions[chatId] = userSession{
-		Lock:      false,
-		Position:  questStartLink,
-		UpdatedAt: time.Now(),
-	}
-}
-
-func sessionGet(chatId int64) (userSession, bool) {
-	session, err := sessions[chatId]
-	return session, !err
-	//TODO если сессия не найдена в рантайме - запрашиваем бд
-}
-
-func sessionSet(chatId int64, session userSession) userSession {
-	sessions[chatId] = session
-	return session
-}
-
 func showMonologue(chatId int64, monologueCollection []string) {
 	for _, message := range monologueCollection {
 		var msg tgbotapi.Chattable
@@ -337,7 +285,7 @@ func showMonologue(chatId int64, monologueCollection []string) {
 		}
 		bot.Send(msg)
 
-		//time.Sleep(time.Second * 1)
+		time.Sleep(time.Millisecond * 300)
 	}
 }
 
@@ -385,9 +333,9 @@ func redrawLastPosition(chatId int64, message string, lastStorySubject storyIter
 }
 
 func generateTextMessage(chatId int64, message string) tgbotapi.MessageConfig {
-	sess, _ := sessionGet(chatId)
+	session := sessions.get(chatId)
 
-	for stuffKey, stuffItem := range sess.Stuff {
+	for stuffKey, stuffItem := range session.Stuff {
 		message = strings.Replace(message, "["+stuffKey+"]", stuffItem, -1)
 	}
 
@@ -438,99 +386,6 @@ func loadConfig(fileName string) {
 	}
 
 	fmt.Printf("%+v\n", config)
-}
-
-func flushSessionToDb(chatId int64, sess userSession) {
-	//отправляем сессию в канал.
-	//Слушатель уже будет разгребать и сохранять сессии
-}
-
-func loadSessions(fileName string) {
-	//Инициализируем БД
-	db, err := bolt.Open(fileName, 0600, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer db.Close()
-
-	//Инициализируем корзину
-	err = db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte(sessionsBucketName))
-
-		return err
-
-	})
-
-	if nil != err {
-		fmt.Println("create bucket err", err)
-		os.Exit(1)
-	}
-
-	//err = db.Update(func(tx *bolt.Tx) error {
-	//	b := tx.Bucket([]byte(sessionsBucketName))
-	//
-	//	for i := 1; i < 10; i++ {
-	//		sess := userSession{
-	//			Stuff:     make(map[string]string),
-	//			Lock:      false,
-	//			UpdatedAt: time.Now(),
-	//			Position:  "first",
-	//		}
-	//		fmt.Println(sess)
-	//
-	//		buf, err := json.Marshal(sess)
-	//		fmt.Println("marshal error - ", err)
-	//
-	//		err = b.Put([]byte(strconv.Itoa(i)), buf)
-	//		fmt.Println("Put to bucket err - ", err)
-	//	}
-	//
-	//	return nil //TODO return err
-	//})
-
-	//db.View(func(tx *bolt.Tx) error {
-	//	b := tx.Bucket([]byte(sessionsBucketName))
-	//	fmt.Println("bucket - ", b.FillPercent)
-	//
-	//	v := b.Get([]byte("1"))
-	//	fmt.Printf("The answer is: %s\n", v)
-	//
-	//	sess := new(userSession)
-	//	err := json.Unmarshal(v, &sess)
-	//
-	//	fmt.Println("error unmarshal", err)
-	//	fmt.Println("sess", sess)
-	//
-	//	return nil
-	//})
-
-	//Заполнение сессий из БД
-	db.View(func(tx *bolt.Tx) error {
-		// Assume bucket exists and has keys
-		b := tx.Bucket([]byte(sessionsBucketName))
-
-		c := b.Cursor()
-
-		for k, v := c.First(); k != nil; k, v = c.Next() {
-			chatId, err := strconv.ParseInt(string(k), 10, 64) //TODO нормальная конвертация в int64
-			if nil != err {
-				return err
-			}
-
-			sess := new(userSession)
-			err = json.Unmarshal(v, &sess)
-
-			fmt.Printf("key=%v value=%v\n", chatId, *sess)
-			if nil != err {
-				return err
-			}
-
-			sessions[chatId] = *sess
-		}
-
-		return nil
-	})
 }
 
 func mergeStoryBlocks(currentStorySubject *storyIteration, lastStorySubject *storyIteration) {
