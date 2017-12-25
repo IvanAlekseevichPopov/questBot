@@ -66,7 +66,7 @@ func main() {
 			continue
 		}
 
-		proceedMessage(update.Message.Chat.ID, update.Message.Text)
+		go proceedMessage(update.Message.Chat.ID, update.Message.Text)
 	}
 }
 
@@ -394,7 +394,7 @@ func mergeStoryBlocks(currentStorySubject *storyIteration, lastStorySubject *sto
 			//Если нет монолога и вопроса - последний из монолога переносим в вопрос.
 			//Остальное - в монолог
 			monologue := lastStorySubject.Monologue
-			question := "1111"
+			question := ""
 
 			if len(lastStorySubject.Monologue) > 1 {
 				question = monologue[len(monologue)-1]

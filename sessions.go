@@ -42,6 +42,7 @@ func (sessions Sessions) get(chatId int64) *UserSession {
 	session, ok := sessions.users[chatId]
 
 	if !ok {
+		//TODO поиск в БД. Выгрузка неактивных сессий в БД
 		//session = dbFind(chatId)
 		//fmt.Println("Db find ended")
 
@@ -85,6 +86,7 @@ func (userSession *UserSession) addStuff(item string, value string) {
 		userSession.Stuff = make(map[string]string)
 	}
 
+	userSession.UpdatedAt = time.Now()
 	userSession.Stuff[item] = value
 	dbSave(userSession)
 }
