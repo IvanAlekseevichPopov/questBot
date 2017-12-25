@@ -266,12 +266,15 @@
       "Я посветил фонариком на схему на стене. Здесь есть генераторная, на один уровень ниже.",
       "Но как туда попасть?..",
       "Придумал! Здесь есть вентиляционные ходы, там можно пробираться пригнувшись. Я залезал в такой. Но там темно и много поворотов, я заблужусь...",
-      "content/images/maze.jpg",
       "Нужна помощь!"
     ],
     "GoTo": "labyrinth_start"
   },
   "labyrinth_start": {
+    "Monologue": [
+      "content/images/maze.jpg"
+    ],
+    "Question": "Я у лаза в вентиляцию",
     "Answers": [
       {
         "title": "вверх",
@@ -283,11 +286,11 @@
       },
       {
         "title": "влево",
-        "postback": "wrong_direction"
+        "postback": "wrong_tunnel_start"
       },
       {
         "title": "вправо",
-        "postback": "wrong_tunnel_start"
+        "postback": "labyrinth_start"
       }
     ]
   },
@@ -305,7 +308,7 @@
     "Answers": [
       {
         "title": "вверх",
-        "postback": "wrong_direction"
+        "postback": "wrong_tunnel_end"
       },
       {
         "title": "вниз",
@@ -313,7 +316,28 @@
       },
       {
         "title": "влево",
+        "postback": "wrong_direction"
+      },
+      {
+        "title": "вправо",
         "postback": "labyrinth_start"
+      }
+    ]
+  },
+  "wrong_tunnel_end": {
+    "Question": "Ok",
+    "Answers": [
+      {
+        "title": "вверх",
+        "postback": "wrong_direction"
+      },
+      {
+        "title": "вниз",
+        "postback": "wrong_tunnel_start"
+      },
+      {
+        "title": "влево",
+        "postback": "wrong_direction"
       },
       {
         "title": "вправо",
@@ -334,11 +358,11 @@
       },
       {
         "title": "влево",
-        "postback": "wrong_direction"
+        "postback": "labyrinth2"
       },
       {
         "title": "вправо",
-        "postback": "labyrinth2"
+        "postback": "wrong_direction"
       }
     ]
   },
@@ -355,11 +379,11 @@
       },
       {
         "title": "влево",
-        "postback": "labyrinth1"
+        "postback": "wrong_direction"
       },
       {
         "title": "вправо",
-        "postback": "wrong_direction"
+        "postback": "labyrinth1"
       }
     ]
   },
@@ -373,48 +397,6 @@
       {
         "title": "вниз",
         "postback": "labyrinth2"
-      },
-      {
-        "title": "влево",
-        "postback": "labyrinth4"
-      },
-      {
-        "title": "вправо",
-        "postback": "wrong_direction"
-      }
-    ]
-  },
-  "labyrinth4": {
-    "Question": "Хорошо",
-    "Answers": [
-      {
-        "title": "вверх",
-        "postback": "labyrinth5"
-      },
-      {
-        "title": "вниз",
-        "postback": "wrong_direction"
-      },
-      {
-        "title": "влево",
-        "postback": "wrong_direction"
-      },
-      {
-        "title": "вправо",
-        "postback": "labyrinth3"
-      }
-    ]
-  },
-  "labyrinth5": {
-    "Question": "Иду",
-    "Answers": [
-      {
-        "title": "вверх",
-        "postback": "wrong_direction"
-      },
-      {
-        "title": "вниз",
-        "postback": "labyrinth4"
       },
       {
         "title": "влево",
