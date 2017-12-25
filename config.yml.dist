@@ -1,2 +1,6 @@
 bot_token: 'bot token here'
+cron_notify: '0 0 * * * *'
+user_notifications:
+  0: { silence_time: 1, message: 'Ты что, забыл про меня??'}
+  1: { silence_time: 3, message: 'Помоги же мне!!'}
 env: 'dev'

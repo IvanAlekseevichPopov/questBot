@@ -18,11 +18,12 @@ type Sessions struct {
 }
 
 type UserSession struct {
-	Stuff     map[string]string //Shoulder bag
-	Position  string            //Position in user story
-	IsWorking bool              //is user locked for runtime
-	UpdatedAt time.Time         //For cron flushes, user reminders
-	UserId    int64
+	Stuff       map[string]string //Shoulder bag
+	Position    string            //Position in user story
+	IsWorking   bool              //is user locked for runtime
+	UpdatedAt   time.Time         //For cron flushes, user reminders
+	UserId      int64
+	NotifyCount int
 	sync.Mutex
 }
 
@@ -34,7 +35,6 @@ func (sessions Sessions) set(chatId int64, session UserSession) {
 	defer sessions.Unlock()
 
 	sessions.users[chatId] = &session
-
 	////TODO отправить запись в канал
 }
 
@@ -48,10 +48,11 @@ func (sessions Sessions) get(chatId int64) *UserSession {
 
 		//Создаем новую сессию
 		session = &UserSession{
-			UpdatedAt: time.Now(),
-			IsWorking: false,
-			Position:  questStartLink,
-			UserId:    chatId,
+			UpdatedAt:   time.Now(),
+			IsWorking:   false,
+			Position:    questStartLink,
+			UserId:      chatId,
+			NotifyCount: 0,
 		}
 
 		sessions.set(chatId, *session)
@@ -78,6 +79,14 @@ func (userSession *UserSession) setUpdatedAt(date time.Time) {
 	dbSave(userSession)
 }
 
+func (userSession *UserSession) increaseNotifyCount() {
+	userSession.Lock()
+	defer userSession.Unlock()
+
+	userSession.NotifyCount = userSession.NotifyCount + 1
+	dbSave(userSession)
+}
+
 func (userSession *UserSession) addStuff(item string, value string) {
 	userSession.Lock()
 	defer userSession.Unlock()
@@ -101,8 +110,6 @@ func (userSession *UserSession) setWorking(flag bool) {
 }
 
 func dbSave(session *UserSession) {
-	fmt.Println("Сохранение в БД")
-
 	sessionToSave := *session
 	sessionToSave.IsWorking = false //Разблокируем перед сохранением. Иначе подтянутая из базы сессия навсегда заблокирована
 
@@ -111,39 +118,46 @@ func dbSave(session *UserSession) {
 		b := tx.Bucket([]byte(sessionsBucketName))
 
 		buf, err := json.Marshal(sessionToSave)
-		fmt.Println("marshal error - ", err)
+		if nil != err {
+			return err
+		}
 
 		err = b.Put([]byte(strconv.FormatInt(sessionToSave.UserId, 10)), buf)
-		fmt.Println("Put to bucket err - ", err)
-
-		return nil //TODO return err
-	})
-
-	fmt.Println("err -", err)
-}
-
-func dbFind(chatId int64) *UserSession {
-	fmt.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^dbFIND$$$$$$$$$$$$$$$$$$$$$")
-	var session = &UserSession{}
-
-	db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(sessionsBucketName))
-
-		v := b.Get([]byte(strconv.FormatInt(chatId, 10)))
-		fmt.Printf("The answer is: %s\n", v)
-
-		//session := new(UserSession)
-		err := json.Unmarshal(v, &session)
-
-		fmt.Println("error unmarshal", err)
-		fmt.Println("session", session)
+		if nil != err {
+			return err
+		}
 
 		return nil
 	})
-	fmt.Println("3444444444444444444444444444444444")
 
-	return session
+	if nil != err {
+		log.Println("Ошибка сохранения сессии в БД. Остановка", err)
+		os.Exit(1)
+	}
 }
+
+//func dbFind(chatId int64) *UserSession {
+//	fmt.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^dbFIND$$$$$$$$$$$$$$$$$$$$$")
+//	var session = &UserSession{}
+//
+//	db.View(func(tx *bolt.Tx) error {
+//		b := tx.Bucket([]byte(sessionsBucketName))
+//
+//		v := b.Get([]byte(strconv.FormatInt(chatId, 10)))
+//		fmt.Printf("The answer is: %s\n", v)
+//
+//		//session := new(UserSession)
+//		err := json.Unmarshal(v, &session)
+//
+//		fmt.Println("error unmarshal", err)
+//		fmt.Println("session", session)
+//
+//		return nil
+//	})
+//	fmt.Println("3444444444444444444444444444444444")
+//
+//	return session
+//}
 
 func loadSessions(fileName string) {
 	//Инициализируем БД

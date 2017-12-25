@@ -6,15 +6,19 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 
 	"time"
 
+	"github.com/boltdb/bolt"
 	"github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/robfig/cron"
 	"gopkg.in/yaml.v2"
 )
 
 const questStartLink = "first"
+const questFinishLink = "exit"
 const sessionsBucketName = "user_sessions"
 
 const blockTypeUserInput = 1    //Блок ожидания пользовательского ввода
@@ -34,8 +38,10 @@ type storyIteration struct {
 }
 
 type appConfig struct {
-	BotToken string `yaml:"bot_token"`
-	Env      string `yaml:"env"`
+	BotToken      string                    `yaml:"bot_token"`
+	Cron          string                    `yaml:"cron"`
+	Notifications map[int]map[string]string `yaml:"user_notifications"`
+	Env           string                    `yaml:"env"`
 }
 
 var bot *tgbotapi.BotAPI
@@ -60,6 +66,8 @@ func main() {
 	if err != nil {
 		log.Panic(err)
 	}
+
+	enableUserNotify(config.Cron)
 
 	for update := range updates {
 		if update.Message == nil {
@@ -247,7 +255,6 @@ func getCurrentPosition(messageFromUser string, lastStorySubject storyIteration)
 		if len(postback) > 0 {
 			storyItem, ok := story[postback]
 			if ok {
-				//fmt.Println("Нашел!", storyItem)
 				return storyItem, postback, ""
 			}
 		}
@@ -291,6 +298,7 @@ func showMonologue(chatId int64, monologueCollection []string) {
 
 func askQuestion(chatId int64, currentStoryPosition storyIteration) {
 	msg := generateTextMessage(chatId, currentStoryPosition.Question)
+	fmt.Println("Отправляем сообщение пользователю")
 
 	if len(currentStoryPosition.Answers) > 0 { // Выбор из готового ответа
 
@@ -385,7 +393,29 @@ func loadConfig(fileName string) {
 		os.Exit(1)
 	}
 
-	fmt.Printf("%+v\n", config)
+	for taskId, task := range config.Notifications {
+		delay, ok := task["silence_time"]
+		if !ok {
+			log.Println("Config error: not found silence_time", taskId)
+			os.Exit(1)
+		}
+		if len(delay) == 0 {
+			log.Println("Config error: invalid silence_time", taskId)
+			os.Exit(1)
+		}
+
+		message, ok := task["message"]
+		if !ok {
+			log.Println("Config error: not found message", taskId)
+			os.Exit(1)
+		}
+		if len(message) < 3 {
+			log.Println("Config error: invalid message", taskId)
+			os.Exit(1)
+		}
+	}
+
+	fmt.Printf("%+v\n\n", config)
 }
 
 func mergeStoryBlocks(currentStorySubject *storyIteration, lastStorySubject *storyIteration) {
@@ -422,4 +452,72 @@ func mergeStoryBlocks(currentStorySubject *storyIteration, lastStorySubject *sto
 			currentStorySubject.Monologue = append(lastStorySubject.Monologue, currentStorySubject.Monologue...)
 		}
 	}
+}
+
+func enableUserNotify(crontime string) {
+	//Напоминания о забытом боте для пользователя
+	fmt.Println("Поставили крон", crontime)
+	c := cron.New()
+	c.AddFunc(crontime, func() {
+		log.Println("Запустили крон")
+		var sessionsToUpdate []int64
+		//Ищем в БД подходяще чаты для напоминалок пользователей
+		err := db.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte(sessionsBucketName))
+			c := b.Cursor()
+
+			for k, v := c.First(); k != nil; k, v = c.Next() {
+				chatId, err := strconv.ParseInt(string(k), 10, 64) //TODO нормальная конвертация в int64
+				if nil != err {
+					return err
+				}
+
+				session := new(UserSession)
+				err = json.Unmarshal(v, &session)
+
+				if nil != err {
+					return err
+				}
+
+				fmt.Printf("key=%v value=%v\n", chatId, *session)
+
+				if session.Position == questStartLink || session.Position == questFinishLink {
+					fmt.Println("Не отсылаем ничего. Пользователь на нейтральной позиции")
+
+					continue
+				}
+
+				realDiff := time.Since(session.UpdatedAt).Hours()
+
+				notify, ok := config.Notifications[session.NotifyCount]
+				if ok {
+					fmt.Println("Найдена инструкция в конфиге для уведомления")
+
+					needDiff, _ := strconv.ParseFloat(notify["silence_time"], 64)
+					if realDiff >= needDiff {
+						fmt.Println("Прошло нужное кол-во времени")
+
+						sessions.set(session.UserId, *session)
+						sessionsToUpdate = append(sessionsToUpdate, session.UserId)
+
+						//Отправляем сообщение с текущей позицией
+						currentPosition := story[session.Position]
+						currentPosition.Monologue = []string{}
+						currentPosition.Question = notify["message"]
+						askQuestion(session.UserId, currentPosition)
+					}
+				}
+			}
+
+			return nil
+		})
+
+		for _, sessionId := range sessionsToUpdate {
+			sessions.get(sessionId).increaseNotifyCount()
+		}
+
+		fmt.Println(err)
+	})
+
+	c.Start()
 }
