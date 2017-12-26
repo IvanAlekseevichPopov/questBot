@@ -512,11 +512,14 @@ func enableUserNotify(crontime string) {
 			return nil
 		})
 
+		if nil != err {
+			log.Println("Ошибка при выполнении крон задания", err)
+			os.Exit(1)
+		}
+
 		for _, sessionId := range sessionsToUpdate {
 			sessions.get(sessionId).increaseNotifyCount()
 		}
-
-		fmt.Println(err)
 	})
 
 	c.Start()
