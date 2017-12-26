@@ -1,6 +1,6 @@
-bot_token: 'bot token here'
-cron_notify: '0 0 * * * *'
+bot_token: 'token'
+cron: '0 * * * * *'
 user_notifications:
-  0: { silence_time: 1, message: 'Ты что, забыл про меня??'}
-  1: { silence_time: 3, message: 'Помоги же мне!!'}
+  0: { silence_time: 1, message: 'Я ещё жив, а ты?'}
+  1: { silence_time: 3, message: 'Маленький мальчик по боксу гулял...|Разные кнопочки там нажимал...|Чётко сработал отлаженный пресс...|Тёпленький блинчик упал под навес…|Чтобы не сойти с ума, вспоминаю детские стишки.Ты обещал мне помочь, помнишь?'}
 env: 'dev'

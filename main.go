@@ -20,6 +20,7 @@ import (
 const questStartLink = "first"
 const questFinishLink = "exit"
 const sessionsBucketName = "user_sessions"
+const notifySpitSymbol = "|"
 
 const blockTypeUserInput = 1    //Блок ожидания пользовательского ввода
 const blockTypeAnswerChoice = 2 //Блок выбора ответа
@@ -487,13 +488,15 @@ func enableUserNotify(crontime string) {
 					continue
 				}
 
-				realDiff := time.Since(session.UpdatedAt).Hours()
+				realDiff := time.Since(session.UpdatedAt).Minutes() //TODO HOURS
+				log.Println(realDiff)
 
 				notify, ok := config.Notifications[session.NotifyCount]
 				if ok {
 					fmt.Println("Найдена инструкция в конфиге для уведомления")
 
 					needDiff, _ := strconv.ParseFloat(notify["silence_time"], 64)
+					log.Println(needDiff)
 					if realDiff >= needDiff {
 						fmt.Println("Прошло нужное кол-во времени")
 
@@ -503,7 +506,16 @@ func enableUserNotify(crontime string) {
 						//Отправляем сообщение с текущей позицией
 						currentPosition := story[session.Position]
 						currentPosition.Monologue = []string{}
-						currentPosition.Question = notify["message"]
+						notifyMessages := strings.Split(notify["message"], notifySpitSymbol)
+						if len(notifyMessages) > 1 {
+							last := len(notifyMessages) - 1
+							currentPosition.Question = notifyMessages[last]
+							notifyMessages = notifyMessages[:last]
+							showMonologue(session.UserId, notifyMessages)
+						} else {
+							currentPosition.Question = notifyMessages[0]
+						}
+
 						askQuestion(session.UserId, currentPosition)
 					}
 				}
