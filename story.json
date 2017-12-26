@@ -86,7 +86,8 @@
       "content/images/breaking-news.png",
       "Вот из-за таких проблем с коммуникативными навыками и погибают люди. Героя уже не воскресить, но можно почитать статью «Категорический императив: как нам общаться друг с другом»",
       "https:\/\/newtonew.com\/culture\/kategoricheskiy-imperativ-kak-obshchatsya-drug-s-drugom"
-    ]
+    ],
+    "GoTo": "exit"
   },
   "isz_question": {
     "Question": "Нет",
@@ -548,10 +549,10 @@
     "GoTo": "open_cupboard"
   },
   "open_cupboard": {
-    "Question": "Может тут что-нибудь спросим???",
+    "Question": "Ай да я, ай да молодец!",
     "Answers": [
       {
-        "title": "Отлично, открывай шкаф.",
+        "title": "Молодец, открывай шкаф.",
         "postback": "cupboard_opened"
       }
     ]
@@ -689,6 +690,10 @@
       {
         "title": "Перчатки и антисептик!",
         "postback": "antiseptic"
+      },
+      {
+        "title": "Нет времени, делай хоть как",
+        "postback": "death_without_respirator"
       }
     ]
   },
