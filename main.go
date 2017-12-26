@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -18,7 +17,9 @@ import (
 )
 
 const questStartLink = "first"
+const questMeetingLink = "meeting"
 const questFinishLink = "exit"
+
 const sessionsBucketName = "user_sessions"
 const notifySpitSymbol = "|"
 
@@ -80,7 +81,7 @@ func main() {
 }
 
 func proceedMessage(chatId int64, messageFromUser string) {
-	log.Println(messageFromUser)
+	log.Println("Сообщение от пользователя:", chatId, messageFromUser)
 	session := sessions.get(chatId)
 
 	if userWantRestart(messageFromUser) {
@@ -94,7 +95,7 @@ func proceedMessage(chatId int64, messageFromUser string) {
 		session.setWorking(false)
 	} else {
 		if session.IsWorking {
-			fmt.Println("Заблокирован ввод пользователя")
+			log.Println("Заблокирован ввод пользователя")
 			return
 		}
 
@@ -110,16 +111,13 @@ func proceedMessage(chatId int64, messageFromUser string) {
 
 		//Количество переходов по истории без участия пользователя
 		for i := 0; i < 3; i++ {
-			fmt.Println(session.Stuff)
-			if proceedPrompt(messageFromUser, lastStorySubject, session) {
-				fmt.Println("Записали в stuff")
-			}
+			proceedPrompt(messageFromUser, lastStorySubject, session)
 
 			typeOfBlock := getTypeOfBlock(messageFromUser, lastStorySubject, currentStorySubject)
 			switch typeOfBlock {
 			case blockTypeUserInput:
 				showMonologue(chatId, currentStorySubject.Monologue)
-				fmt.Println("Ожидание пользовательского ввода")
+				log.Println("Ожидание пользовательского ввода")
 				askQuestion(chatId, currentStorySubject)
 
 				session.setPosition(postback)
@@ -127,8 +125,7 @@ func proceedMessage(chatId int64, messageFromUser string) {
 				return
 
 			case blockTypeAnswerChoice:
-				fmt.Println("Выбор ответа")
-
+				log.Println("Выбор ответа")
 				showMonologue(chatId, currentStorySubject.Monologue)
 				askQuestion(chatId, currentStorySubject)
 
@@ -137,7 +134,7 @@ func proceedMessage(chatId int64, messageFromUser string) {
 				return
 
 			case blockTypePutStuff:
-				fmt.Println("Берем вещь и идем дальше")
+				log.Println("Берем вещь и идем дальше")
 				showMonologue(chatId, currentStorySubject.Monologue)
 				proceedPutStuff(&postback, &currentStorySubject, session)
 
@@ -145,14 +142,13 @@ func proceedMessage(chatId int64, messageFromUser string) {
 				continue
 
 			case blockTypeCheckStuff:
-				fmt.Println("Есть ли нужное барахло")
+				log.Println("Есть ли нужное барахло")
 				showMonologue(chatId, currentStorySubject.Monologue)
 				proceedCheckStuff(&postback, &currentStorySubject, session)
-
 				continue
 
 			case blockTypeShowMessage:
-				fmt.Println("Зачитал и перешел на вопрос. Переносит question в следующую итерацию")
+				log.Println("Зачитал и перешел на вопрос. Переносит question в следующую итерацию")
 
 				session.setPosition(postback)
 
@@ -175,7 +171,6 @@ func proceedCheckStuff(postback *string, currentStoryBlock *storyIteration, sess
 		if !stuffExist {
 			*postback = failGoTo
 			*currentStoryBlock = story[*postback]
-			fmt.Println("fail card goto")
 			return
 		}
 	}
@@ -183,7 +178,6 @@ func proceedCheckStuff(postback *string, currentStoryBlock *storyIteration, sess
 	sess.setPosition(*postback)
 	*postback = currentStoryBlock.GoTo
 	*currentStoryBlock = story[*postback]
-	fmt.Println("success card goto")
 }
 
 func getTypeOfBlock(messageFromUser string, lastStoryBlock storyIteration, currentStoryBlock storyIteration) int {
@@ -226,17 +220,15 @@ func proceedPutStuff(postback *string, currentStoryObject *storyIteration, sessi
 	}
 }
 
-func proceedPrompt(userMessage string, lastStorySubject storyIteration, session *UserSession) bool {
+func proceedPrompt(userMessage string, lastStorySubject storyIteration, session *UserSession) {
 	if len(lastStorySubject.Prompt) > 0 {
 		if nil == session.Stuff {
 			session.Stuff = make(map[string]string)
 		}
 
 		session.addStuff(lastStorySubject.Prompt, userMessage)
-		return true
+		log.Println("Записали в stuff")
 	}
-
-	return false
 }
 
 func getCurrentPosition(messageFromUser string, lastStorySubject storyIteration) (storyIteration, string, string) {
@@ -265,15 +257,15 @@ func getCurrentPosition(messageFromUser string, lastStorySubject storyIteration)
 
 		currentStorySubject, ok := story[lastStorySubject.GoTo]
 		if !ok {
-			return storyIteration{}, "", "Я вас не понимаю4."
+			return storyIteration{}, "", "Я вас не понимаю.."
 		}
 
 		return currentStorySubject, lastStorySubject.GoTo, ""
+	} else {
+		log.Println("Получение позиции...Неизвестно, что делать дальше", lastStorySubject, messageFromUser)
+		os.Exit(1)
 	}
 
-	log.Println("Неизвестно, что делать дальше")
-	fmt.Println(lastStorySubject)
-	fmt.Println(messageFromUser)
 	return storyIteration{}, "", "Alert! Error! Unknown user reaction"
 }
 
@@ -300,7 +292,6 @@ func showMonologue(chatId int64, monologueCollection []string) {
 
 func askQuestion(chatId int64, currentStoryPosition storyIteration) {
 	msg := generateTextMessage(chatId, currentStoryPosition.Question)
-	fmt.Println("Отправляем сообщение пользователю")
 
 	if len(currentStoryPosition.Answers) > 0 { // Выбор из готового ответа
 
@@ -353,16 +344,14 @@ func generateTextMessage(chatId int64, message string) tgbotapi.MessageConfig {
 }
 
 func loadStory(fileName string) {
-	//bot.Debug = true
 	file, err := ioutil.ReadFile(fileName)
 	if err != nil {
-		fmt.Printf("File error: %v\n", err)
+		log.Printf("Story loading error error: %v\n", err)
 		os.Exit(1)
 	}
 
 	json.Unmarshal(file, &story)
-
-	log.Printf("Story is loaded")
+	log.Println("Story is loaded")
 }
 
 func checkStory() {
@@ -416,8 +405,6 @@ func loadConfig(fileName string) {
 			os.Exit(1)
 		}
 	}
-
-	fmt.Printf("%+v\n\n", config)
 }
 
 func mergeStoryBlocks(currentStorySubject *storyIteration, lastStorySubject *storyIteration) {
@@ -435,7 +422,7 @@ func mergeStoryBlocks(currentStorySubject *storyIteration, lastStorySubject *sto
 				question = monologue[len(monologue)-1]
 				monologue = []string{}
 			} else {
-				fmt.Println("Недостижимое условие!!!")
+				log.Println("Недостижимое условие!!!")
 				os.Exit(1)
 			}
 
@@ -458,7 +445,7 @@ func mergeStoryBlocks(currentStorySubject *storyIteration, lastStorySubject *sto
 
 func enableUserNotify(crontime string) {
 	//Напоминания о забытом боте для пользователя
-	fmt.Println("Поставили крон", crontime)
+	log.Println("Поставили крон", crontime)
 	c := cron.New()
 	c.AddFunc(crontime, func() {
 		log.Println("Запустили крон")
@@ -475,16 +462,15 @@ func enableUserNotify(crontime string) {
 				}
 
 				session := new(UserSession)
-				err = json.Unmarshal(v, &session)
 
-				if nil != err {
+				if err = json.Unmarshal(v, &session); nil != err {
 					return err
 				}
 
-				fmt.Printf("key=%v value=%v\n", chatId, *session)
+				log.Printf("key=%v value=%v\n", chatId, *session)
 
-				if session.Position == questStartLink || session.Position == questFinishLink {
-					fmt.Println("Не отсылаем ничего. Пользователь на нейтральной позиции")
+				if session.Position == questStartLink || session.Position == questFinishLink || session.Position == questMeetingLink {
+					log.Println("Не отсылаем ничего. Пользователь на нейтральной позиции")
 					continue
 				}
 
@@ -493,12 +479,11 @@ func enableUserNotify(crontime string) {
 
 				notify, ok := config.Notifications[session.NotifyCount]
 				if ok {
-					fmt.Println("Найдена инструкция в конфиге для уведомления")
+					log.Println("Есть что отправить. Проверяем прошедшее время")
 
 					needDiff, _ := strconv.ParseFloat(notify["silence_time"], 64)
-					log.Println(needDiff)
 					if realDiff >= needDiff {
-						fmt.Println("Прошло нужное кол-во времени")
+						log.Println("Прошло нужное кол-во времени")
 
 						sessions.set(session.UserId, *session)
 						sessionsToUpdate = append(sessionsToUpdate, session.UserId)
