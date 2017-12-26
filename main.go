@@ -50,10 +50,10 @@ var story map[string]storyIteration
 var config appConfig
 
 func init() {
-	loadConfig("config.yml")    //TODO in execution parameter
-	loadSessions("sessions.db") //TODO in execution parameter
+	loadConfig("config.yml")            //TODO in execution parameter
+	loadSessions("content/sessions.db") //TODO in execution parameter
 
-	loadStory()
+	loadStory("content/story.json")
 	checkStory()
 
 	initBot()
@@ -80,11 +80,8 @@ func main() {
 }
 
 func proceedMessage(chatId int64, messageFromUser string) {
-
-	fmt.Println(messageFromUser)
-
+	log.Println(messageFromUser)
 	session := sessions.get(chatId)
-	fmt.Printf("%+v\n\n", session)
 
 	if userWantRestart(messageFromUser) {
 		session.setPosition(questStartLink)
@@ -293,7 +290,11 @@ func showMonologue(chatId int64, monologueCollection []string) {
 		}
 		bot.Send(msg)
 
-		time.Sleep(time.Millisecond * 300)
+		if config.Env == "dev" {
+			time.Sleep(time.Millisecond * 300)
+		} else {
+			time.Sleep(time.Millisecond * 1100)
+		}
 	}
 }
 
@@ -351,9 +352,9 @@ func generateTextMessage(chatId int64, message string) tgbotapi.MessageConfig {
 	return tgbotapi.NewMessage(chatId, message)
 }
 
-func loadStory() {
+func loadStory(fileName string) {
 	//bot.Debug = true
-	file, err := ioutil.ReadFile("./story.json")
+	file, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		fmt.Printf("File error: %v\n", err)
 		os.Exit(1)
@@ -484,11 +485,10 @@ func enableUserNotify(crontime string) {
 
 				if session.Position == questStartLink || session.Position == questFinishLink {
 					fmt.Println("Не отсылаем ничего. Пользователь на нейтральной позиции")
-
 					continue
 				}
 
-				realDiff := time.Since(session.UpdatedAt).Minutes() //TODO HOURS
+				realDiff := time.Since(session.UpdatedAt).Hours()
 				log.Println(realDiff)
 
 				notify, ok := config.Notifications[session.NotifyCount]
@@ -503,20 +503,7 @@ func enableUserNotify(crontime string) {
 						sessions.set(session.UserId, *session)
 						sessionsToUpdate = append(sessionsToUpdate, session.UserId)
 
-						//Отправляем сообщение с текущей позицией
-						currentPosition := story[session.Position]
-						currentPosition.Monologue = []string{}
-						notifyMessages := strings.Split(notify["message"], notifySpitSymbol)
-						if len(notifyMessages) > 1 {
-							last := len(notifyMessages) - 1
-							currentPosition.Question = notifyMessages[last]
-							notifyMessages = notifyMessages[:last]
-							showMonologue(session.UserId, notifyMessages)
-						} else {
-							currentPosition.Question = notifyMessages[0]
-						}
-
-						askQuestion(session.UserId, currentPosition)
+						notifyUser(session, notify)
 					}
 				}
 			}
@@ -535,4 +522,20 @@ func enableUserNotify(crontime string) {
 	})
 
 	c.Start()
+}
+
+func notifyUser(session *UserSession, notify map[string]string) {
+	currentPosition := story[session.Position]
+	currentPosition.Monologue = []string{}
+	notifyMessages := strings.Split(notify["message"], notifySpitSymbol)
+	if len(notifyMessages) > 1 {
+		last := len(notifyMessages) - 1
+		currentPosition.Question = notifyMessages[last]
+		notifyMessages = notifyMessages[:last]
+		showMonologue(session.UserId, notifyMessages)
+	} else {
+		currentPosition.Question = notifyMessages[0]
+	}
+
+	askQuestion(session.UserId, currentPosition)
 }
