@@ -693,9 +693,17 @@
       },
       {
         "title": "Нет времени, делай хоть как",
-        "postback": "death_without_respirator"
+        "postback": "wrong_injection"
       }
     ]
+  },
+  "wrong_injection": {
+    "Monologue": [
+      "А вот спешить здесь, [userName], не стоило.",
+      "Попробуй осознанно подойти к своей ошибке и прочитай статью «Что говорит наука о медитации?",
+      "https:\/\/newtonew.com/science/meditaciya-ili-praktika-osoznannosti"
+    ],
+    "GoTo": "exit"
   },
   "antiseptic": {
     "Question": "Окей, всё сделал, теперь что?",
