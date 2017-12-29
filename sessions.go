@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -87,6 +86,14 @@ func (userSession *UserSession) increaseNotifyCount() {
 	dbSave(userSession)
 }
 
+func (userSession *UserSession) resetNotifyCount() {
+	userSession.Lock()
+	defer userSession.Unlock()
+
+	userSession.NotifyCount = 0
+	dbSave(userSession)
+}
+
 func (userSession *UserSession) addStuff(item string, value string) {
 	userSession.Lock()
 	defer userSession.Unlock()
@@ -97,6 +104,16 @@ func (userSession *UserSession) addStuff(item string, value string) {
 
 	userSession.UpdatedAt = time.Now()
 	userSession.Stuff[item] = value
+	dbSave(userSession)
+}
+
+func (userSession *UserSession) clearStuff() {
+	userSession.Lock()
+	defer userSession.Unlock()
+
+	userSession.Stuff = make(map[string]string)
+	userSession.UpdatedAt = time.Now()
+
 	dbSave(userSession)
 }
 
@@ -114,7 +131,7 @@ func dbSave(session *UserSession) {
 	sessionToSave.IsWorking = false //Разблокируем перед сохранением. Иначе подтянутая из базы сессия навсегда заблокирована
 
 	err := db.Update(func(tx *bolt.Tx) error {
-		fmt.Println(sessionToSave)
+		log.Println("Сохраняем сесию", sessionToSave)
 		b := tx.Bucket([]byte(sessionsBucketName))
 
 		buf, err := json.Marshal(sessionToSave)
@@ -165,7 +182,6 @@ func loadSessions(fileName string) {
 
 	db, err = bolt.Open(fileName, 0600, nil)
 
-	fmt.Println(db)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -177,7 +193,7 @@ func loadSessions(fileName string) {
 	})
 
 	if nil != err {
-		fmt.Println("create bucket error:", err)
+		log.Println("create bucket error:", err)
 		os.Exit(1)
 	}
 
@@ -196,7 +212,7 @@ func loadSessions(fileName string) {
 			session := new(UserSession)
 			err = json.Unmarshal(v, &session)
 
-			fmt.Printf("key=%v value=%v\n", chatId, *session)
+			log.Printf("key=%v value=%v\n", chatId, *session)
 			if nil != err {
 				return err
 			}
@@ -208,11 +224,11 @@ func loadSessions(fileName string) {
 	})
 
 	if nil != err {
-		fmt.Println("Fill sessions error:", err)
+		log.Println("Fill sessions error:", err)
 		os.Exit(1)
 	}
 
 	for key, sess := range sessions.users {
-		fmt.Printf("chat - %d - sess- %+v\n", key, sess)
+		log.Printf("chat - %d - sess- %+v\n", key, sess)
 	}
 }

@@ -27,7 +27,7 @@ const blockTypeUserInput = 1    //Блок ожидания пользовате
 const blockTypeAnswerChoice = 2 //Блок выбора ответа
 const blockTypePutStuff = 3     //Блок пополнения снаряжения
 const blockTypeCheckStuff = 4   //Блок проверки необходимого сняряжения
-const blockTypeShowMessage = 5  //Блок показа сообщения и преход по GoTo
+const blockTypeShowMessage = 5  //Блок показа сообщения и переход по GoTo
 
 type storyIteration struct {
 	Monologue  []string
@@ -44,6 +44,7 @@ type appConfig struct {
 	Cron          string                    `yaml:"cron"`
 	Notifications map[int]map[string]string `yaml:"user_notifications"`
 	Env           string                    `yaml:"env"`
+	Delay         time.Duration             `yaml:"message_delay"`
 }
 
 var bot *tgbotapi.BotAPI
@@ -85,8 +86,10 @@ func proceedMessage(chatId int64, messageFromUser string) {
 	session := sessions.get(chatId)
 
 	if userWantRestart(messageFromUser) {
-		session.setPosition(questStartLink)
 		session.setWorking(true)
+		session.setPosition(questStartLink)
+		session.resetNotifyCount()
+		session.clearStuff()
 
 		startStoryPosition := story[questStartLink]
 		showMonologue(chatId, startStoryPosition.Monologue)
@@ -108,12 +111,17 @@ func proceedMessage(chatId int64, messageFromUser string) {
 		}
 
 		session.setWorking(true) //Заблокировали ввод пользователя
+		if questStartLink == postback {
+			log.Print("Очищаем Stuff")
+			session.resetNotifyCount()
+			session.clearStuff()
+		}
 
 		//Количество переходов по истории без участия пользователя
 		for i := 0; i < 3; i++ {
 			proceedPrompt(messageFromUser, lastStorySubject, session)
 
-			typeOfBlock := getTypeOfBlock(messageFromUser, lastStorySubject, currentStorySubject)
+			typeOfBlock := getTypeOfBlock(currentStorySubject)
 			switch typeOfBlock {
 			case blockTypeUserInput:
 				showMonologue(chatId, currentStorySubject.Monologue)
@@ -180,7 +188,7 @@ func proceedCheckStuff(postback *string, currentStoryBlock *storyIteration, sess
 	*currentStoryBlock = story[*postback]
 }
 
-func getTypeOfBlock(messageFromUser string, lastStoryBlock storyIteration, currentStoryBlock storyIteration) int {
+func getTypeOfBlock(currentStoryBlock storyIteration) int {
 	if len(currentStoryBlock.GoTo) == 0 {
 		if len(currentStoryBlock.Answers) > 0 && len(currentStoryBlock.Question) > 0 { //Выбор готового решения
 			return blockTypeAnswerChoice
@@ -249,7 +257,7 @@ func getCurrentPosition(messageFromUser string, lastStorySubject storyIteration)
 			}
 		}
 
-		return storyIteration{}, "", "Я вас не понимаю."
+		return storyIteration{}, "", "Я тебя не понимаю."
 
 	} else if len(lastStorySubject.Prompt) > 0 && len(lastStorySubject.GoTo) > 0 {
 		//Проверяем, если предыдущая итерация закончилась запросом пользовательского ввода
@@ -257,7 +265,7 @@ func getCurrentPosition(messageFromUser string, lastStorySubject storyIteration)
 
 		currentStorySubject, ok := story[lastStorySubject.GoTo]
 		if !ok {
-			return storyIteration{}, "", "Я вас не понимаю.."
+			return storyIteration{}, "", "Я тебя не понимаю.."
 		}
 
 		return currentStorySubject, lastStorySubject.GoTo, ""
@@ -280,14 +288,11 @@ func showMonologue(chatId int64, monologueCollection []string) {
 		} else {
 			msg = generateTextMessage(chatId, message)
 		}
-		bot.Send(msg)
 
-		if config.Env == "dev" {
-			time.Sleep(time.Millisecond * 300)
-		} else {
-			time.Sleep(time.Millisecond * 1100)
-		}
+		messageDelay()
+		bot.Send(msg)
 	}
+	messageDelay()
 }
 
 func askQuestion(chatId int64, currentStoryPosition storyIteration) {
@@ -405,6 +410,16 @@ func loadConfig(fileName string) {
 			os.Exit(1)
 		}
 	}
+
+	if len(config.Cron) < 4 {
+		log.Println("Config error: invalid cron", config.Cron)
+		os.Exit(1)
+	}
+
+	if 0 == config.Delay || config.Delay > 10000 {
+		log.Println("Config error: invalid delay", config.Delay)
+		os.Exit(1)
+	}
 }
 
 func mergeStoryBlocks(currentStorySubject *storyIteration, lastStorySubject *storyIteration) {
@@ -447,8 +462,10 @@ func enableUserNotify(crontime string) {
 	//Напоминания о забытом боте для пользователя
 	log.Println("Поставили крон", crontime)
 	c := cron.New()
+
 	c.AddFunc(crontime, func() {
 		log.Println("Запустили крон")
+		log.Println("Количество сессий - ", len(sessions.users))
 		var sessionsToUpdate []int64
 		//Ищем в БД подходяще чаты для напоминалок пользователей
 		err := db.View(func(tx *bolt.Tx) error {
@@ -523,4 +540,8 @@ func notifyUser(session *UserSession, notify map[string]string) {
 	}
 
 	askQuestion(session.UserId, currentPosition)
+}
+
+func messageDelay() {
+	time.Sleep(time.Millisecond * config.Delay)
 }
