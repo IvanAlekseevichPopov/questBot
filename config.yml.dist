@@ -1,6 +1,8 @@
-bot_token: 'write token here'
+bot_token: 'bot_token_here'
 #cronjob for notify users
 cron: '0 0 * * * *'
+#delay behind bot messages
+message_delay: 300
 user_notifications:
   0: { silence_time: 1, message: 'Я ещё жив, а ты?'}
   1: { silence_time: 24, message: 'Маленький мальчик по боксу гулял...|Разные кнопочки там нажимал...|Чётко сработал отлаженный пресс...|Тёпленький блинчик упал под навес…|Чтобы не сойти с ума, вспоминаю детские стишки.Ты обещал мне помочь, помнишь?'}

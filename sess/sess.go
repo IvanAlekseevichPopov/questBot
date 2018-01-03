@@ -1,4 +1,4 @@
-package main
+package sess
 
 import (
 	"encoding/json"
@@ -11,9 +11,11 @@ import (
 	"github.com/boltdb/bolt"
 )
 
-type Sessions struct {
+const sessionsBucketName = "user_sessions"
+
+type SessionsStruct struct {
 	sync.Mutex
-	users map[int64]*UserSession
+	Users map[int64]*UserSession
 }
 
 type UserSession struct {
@@ -26,41 +28,40 @@ type UserSession struct {
 	sync.Mutex
 }
 
-var sessions = Sessions{users: make(map[int64]*UserSession)}
 var db *bolt.DB
 
-func (sessions Sessions) set(chatId int64, session UserSession) {
+func (sessions SessionsStruct) Set(chatId int64, session UserSession) {
 	sessions.Lock()
 	defer sessions.Unlock()
 
-	sessions.users[chatId] = &session
+	sessions.Users[chatId] = &session
 	////TODO отправить запись в канал
 }
 
-func (sessions Sessions) get(chatId int64) *UserSession {
-	session, ok := sessions.users[chatId]
+func (sessions SessionsStruct) Get(chatId int64, startLink string) *UserSession {
+	session, ok := sessions.Users[chatId]
 
 	if !ok {
 		//TODO поиск в БД. Выгрузка неактивных сессий в БД
-		//session = dbFind(chatId)
+		//sess = dbFind(chatId)
 		//fmt.Println("Db find ended")
 
 		//Создаем новую сессию
 		session = &UserSession{
 			UpdatedAt:   time.Now(),
 			IsWorking:   false,
-			Position:    questStartLink,
+			Position:    startLink,
 			UserId:      chatId,
 			NotifyCount: 0,
 		}
 
-		sessions.set(chatId, *session)
+		sessions.Set(chatId, *session)
 	}
 
 	return session
 }
 
-func (userSession *UserSession) setPosition(position string) {
+func (userSession *UserSession) SetPosition(position string) {
 	userSession.Lock()
 	defer userSession.Unlock()
 
@@ -70,7 +71,7 @@ func (userSession *UserSession) setPosition(position string) {
 	dbSave(userSession)
 }
 
-func (userSession *UserSession) setUpdatedAt(date time.Time) {
+func (userSession *UserSession) SetUpdatedAt(date time.Time) {
 	userSession.Lock()
 	defer userSession.Unlock()
 
@@ -78,7 +79,7 @@ func (userSession *UserSession) setUpdatedAt(date time.Time) {
 	dbSave(userSession)
 }
 
-func (userSession *UserSession) increaseNotifyCount() {
+func (userSession *UserSession) IncreaseNotifyCount() {
 	userSession.Lock()
 	defer userSession.Unlock()
 
@@ -86,7 +87,7 @@ func (userSession *UserSession) increaseNotifyCount() {
 	dbSave(userSession)
 }
 
-func (userSession *UserSession) resetNotifyCount() {
+func (userSession *UserSession) ResetNotifyCount() {
 	userSession.Lock()
 	defer userSession.Unlock()
 
@@ -94,7 +95,7 @@ func (userSession *UserSession) resetNotifyCount() {
 	dbSave(userSession)
 }
 
-func (userSession *UserSession) addStuff(item string, value string) {
+func (userSession *UserSession) AddStuff(item string, value string) {
 	userSession.Lock()
 	defer userSession.Unlock()
 
@@ -107,7 +108,7 @@ func (userSession *UserSession) addStuff(item string, value string) {
 	dbSave(userSession)
 }
 
-func (userSession *UserSession) clearStuff() {
+func (userSession *UserSession) ClearStuff() {
 	userSession.Lock()
 	defer userSession.Unlock()
 
@@ -117,7 +118,7 @@ func (userSession *UserSession) clearStuff() {
 	dbSave(userSession)
 }
 
-func (userSession *UserSession) setWorking(flag bool) {
+func (userSession *UserSession) SetWorking(flag bool) {
 	userSession.Lock()
 	defer userSession.Unlock()
 
@@ -155,7 +156,7 @@ func dbSave(session *UserSession) {
 
 //func dbFind(chatId int64) *UserSession {
 //	fmt.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^dbFIND$$$$$$$$$$$$$$$$$$$$$")
-//	var session = &UserSession{}
+//	var sess = &UserSession{}
 //
 //	db.View(func(tx *bolt.Tx) error {
 //		b := tx.Bucket([]byte(sessionsBucketName))
@@ -163,20 +164,20 @@ func dbSave(session *UserSession) {
 //		v := b.Get([]byte(strconv.FormatInt(chatId, 10)))
 //		fmt.Printf("The answer is: %s\n", v)
 //
-//		//session := new(UserSession)
-//		err := json.Unmarshal(v, &session)
+//		//sess := new(UserSession)
+//		err := json.Unmarshal(v, &sess)
 //
 //		fmt.Println("error unmarshal", err)
-//		fmt.Println("session", session)
+//		fmt.Println("sess", sess)
 //
 //		return nil
 //	})
 //	fmt.Println("3444444444444444444444444444444444")
 //
-//	return session
+//	return sess
 //}
 
-func loadSessions(fileName string) {
+func (sessions *SessionsStruct) LoadSessions(fileName string) {
 	//Инициализируем БД
 	var err error
 
@@ -217,18 +218,76 @@ func loadSessions(fileName string) {
 				return err
 			}
 
-			sessions.users[chatId] = session
+			sessions.Users[chatId] = session
 		}
 
 		return nil
 	})
 
 	if nil != err {
-		log.Println("Fill sessions error:", err)
+		log.Println("Fill Sessions error:", err)
 		os.Exit(1)
 	}
 
-	for key, sess := range sessions.users {
+	for key, sess := range sessions.Users {
 		log.Printf("chat - %d - sess- %+v\n", key, sess)
 	}
+}
+
+func GetAllSessions(unusedLinks []string, notifications map[int]map[string]string, fn func(session *UserSession, notify map[string]string)) SessionsStruct {
+	var sessionsNotify = SessionsStruct{Users: make(map[int64]*UserSession)}
+
+	err := db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(sessionsBucketName))
+		c := b.Cursor()
+
+	START:
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			chatId, err := strconv.ParseInt(string(k), 10, 64) //TODO нормальная конвертация в int64
+			if nil != err {
+				return err
+			}
+
+			session := new(UserSession)
+
+			if err = json.Unmarshal(v, &session); nil != err {
+				return err
+			}
+
+			log.Printf("key=%v value=%v\n", chatId, *session)
+
+			for _, unusedLink := range unusedLinks {
+				if session.Position == unusedLink {
+					log.Println("Не отсылаем ничего. Пользователь на нейтральной позиции")
+					continue START
+				}
+			}
+
+			realDiff := time.Since(session.UpdatedAt).Hours()
+			log.Println(realDiff)
+
+			notify, ok := notifications[session.NotifyCount]
+
+			if ok {
+				log.Println("Есть что отправить. Проверяем прошедшее время")
+
+				needDiff, _ := strconv.ParseFloat(notify["silence_time"], 64)
+				if realDiff >= needDiff {
+					log.Println("Прошло нужное кол-во времени")
+
+					fn(session, notify)
+					sessionsNotify.Set(session.UserId, *session)
+				}
+			}
+		}
+
+		return nil
+	})
+
+	if nil != err {
+		log.Println("Ошибка при выполнении крон задания", err)
+		os.Exit(1)
+	}
+
+	return sessionsNotify
 }

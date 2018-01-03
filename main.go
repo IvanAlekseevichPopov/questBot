@@ -5,13 +5,12 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"strconv"
 	"strings"
 
 	"time"
 
-	"github.com/boltdb/bolt"
 	"github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/ivan.alekseevich.popov/questBot/sess"
 	"github.com/robfig/cron"
 	"gopkg.in/yaml.v2"
 )
@@ -20,7 +19,6 @@ const questStartLink = "first"
 const questMeetingLink = "meeting"
 const questFinishLink = "exit"
 
-const sessionsBucketName = "user_sessions"
 const notifySpitSymbol = "|"
 
 const blockTypeUserInput = 1    //Блок ожидания пользовательского ввода
@@ -50,10 +48,11 @@ type appConfig struct {
 var bot *tgbotapi.BotAPI
 var story map[string]storyIteration
 var config appConfig
+var sessions = sess.SessionsStruct{Users: make(map[int64]*sess.UserSession)}
 
 func init() {
-	loadConfig("config.yml")            //TODO in execution parameter
-	loadSessions("content/sessions.db") //TODO in execution parameter
+	loadConfig("config.yml")                     //TODO in execution parameter
+	sessions.LoadSessions("content/sessions.db") //TODO in execution parameter
 
 	loadStory("content/story.json")
 	checkStory()
@@ -83,19 +82,19 @@ func main() {
 
 func proceedMessage(chatId int64, messageFromUser string) {
 	log.Println("Сообщение от пользователя:", chatId, messageFromUser)
-	session := sessions.get(chatId)
+	session := sessions.Get(chatId, questStartLink)
 
 	if userWantRestart(messageFromUser) {
-		session.setWorking(true)
-		session.setPosition(questStartLink)
-		session.resetNotifyCount()
-		session.clearStuff()
+		session.SetWorking(true)
+		session.SetPosition(questStartLink)
+		session.ResetNotifyCount()
+		session.ClearStuff()
 
 		startStoryPosition := story[questStartLink]
 		showMonologue(chatId, startStoryPosition.Monologue)
 		askQuestion(chatId, startStoryPosition)
 
-		session.setWorking(false)
+		session.SetWorking(false)
 	} else {
 		if session.IsWorking {
 			log.Println("Заблокирован ввод пользователя")
@@ -110,11 +109,11 @@ func proceedMessage(chatId int64, messageFromUser string) {
 			return
 		}
 
-		session.setWorking(true) //Заблокировали ввод пользователя
+		session.SetWorking(true) //Заблокировали ввод пользователя
 		if questStartLink == postback {
 			log.Print("Очищаем Stuff")
-			session.resetNotifyCount()
-			session.clearStuff()
+			session.ResetNotifyCount()
+			session.ClearStuff()
 		}
 
 		//Количество переходов по истории без участия пользователя
@@ -128,8 +127,8 @@ func proceedMessage(chatId int64, messageFromUser string) {
 				log.Println("Ожидание пользовательского ввода")
 				askQuestion(chatId, currentStorySubject)
 
-				session.setPosition(postback)
-				session.setWorking(false)
+				session.SetPosition(postback)
+				session.SetWorking(false)
 				return
 
 			case blockTypeAnswerChoice:
@@ -137,8 +136,8 @@ func proceedMessage(chatId int64, messageFromUser string) {
 				showMonologue(chatId, currentStorySubject.Monologue)
 				askQuestion(chatId, currentStorySubject)
 
-				session.setPosition(postback)
-				session.setWorking(false)
+				session.SetPosition(postback)
+				session.SetWorking(false)
 				return
 
 			case blockTypePutStuff:
@@ -146,7 +145,7 @@ func proceedMessage(chatId int64, messageFromUser string) {
 				showMonologue(chatId, currentStorySubject.Monologue)
 				proceedPutStuff(&postback, &currentStorySubject, session)
 
-				session.setPosition(postback)
+				session.SetPosition(postback)
 				continue
 
 			case blockTypeCheckStuff:
@@ -158,7 +157,7 @@ func proceedMessage(chatId int64, messageFromUser string) {
 			case blockTypeShowMessage:
 				log.Println("Зачитал и перешел на вопрос. Переносит question в следующую итерацию")
 
-				session.setPosition(postback)
+				session.SetPosition(postback)
 
 				postback = currentStorySubject.GoTo
 				lastStorySubject = currentStorySubject
@@ -171,8 +170,8 @@ func proceedMessage(chatId int64, messageFromUser string) {
 	}
 }
 
-func proceedCheckStuff(postback *string, currentStoryBlock *storyIteration, sess *UserSession) {
-	userStuff := sess.Stuff
+func proceedCheckStuff(postback *string, currentStoryBlock *storyIteration, session *sess.UserSession) {
+	userStuff := session.Stuff
 
 	for item, failGoTo := range currentStoryBlock.CheckStuff {
 		_, stuffExist := userStuff[item]
@@ -183,7 +182,7 @@ func proceedCheckStuff(postback *string, currentStoryBlock *storyIteration, sess
 		}
 	}
 
-	sess.setPosition(*postback)
+	session.SetPosition(*postback)
 	*postback = currentStoryBlock.GoTo
 	*currentStoryBlock = story[*postback]
 }
@@ -214,27 +213,27 @@ func userWantRestart(message string) bool {
 	return message == "/start" || message == "start" || message == "/logout" || message == "logout" || message == "/stop"
 }
 
-func proceedPutStuff(postback *string, currentStoryObject *storyIteration, session *UserSession) {
+func proceedPutStuff(postback *string, currentStoryObject *storyIteration, session *sess.UserSession) {
 	if len(currentStoryObject.Stuff) > 0 && len(currentStoryObject.GoTo) > 0 {
 		//Берем stuff и сдвигаем вперед сессию
 		if nil == session.Stuff {
 			session.Stuff = make(map[string]string)
 		}
 
-		session.addStuff(currentStoryObject.Stuff, "1")
+		session.AddStuff(currentStoryObject.Stuff, "1")
 
 		*postback = currentStoryObject.GoTo
 		*currentStoryObject = story[currentStoryObject.GoTo]
 	}
 }
 
-func proceedPrompt(userMessage string, lastStorySubject storyIteration, session *UserSession) {
+func proceedPrompt(userMessage string, lastStorySubject storyIteration, session *sess.UserSession) {
 	if len(lastStorySubject.Prompt) > 0 {
 		if nil == session.Stuff {
 			session.Stuff = make(map[string]string)
 		}
 
-		session.addStuff(lastStorySubject.Prompt, userMessage)
+		session.AddStuff(lastStorySubject.Prompt, userMessage)
 		log.Println("Записали в stuff")
 	}
 }
@@ -339,7 +338,7 @@ func redrawLastPosition(chatId int64, message string, lastStorySubject storyIter
 }
 
 func generateTextMessage(chatId int64, message string) tgbotapi.MessageConfig {
-	session := sessions.get(chatId)
+	session := sessions.Get(chatId, questStartLink)
 
 	for stuffKey, stuffItem := range session.Stuff {
 		message = strings.Replace(message, "["+stuffKey+"]", stuffItem, -1)
@@ -458,75 +457,7 @@ func mergeStoryBlocks(currentStorySubject *storyIteration, lastStorySubject *sto
 	}
 }
 
-func enableUserNotify(crontime string) {
-	//Напоминания о забытом боте для пользователя
-	log.Println("Поставили крон", crontime)
-	c := cron.New()
-
-	c.AddFunc(crontime, func() {
-		log.Println("Запустили крон")
-		log.Println("Количество сессий - ", len(sessions.users))
-		var sessionsToUpdate []int64
-		//Ищем в БД подходяще чаты для напоминалок пользователей
-		err := db.View(func(tx *bolt.Tx) error {
-			b := tx.Bucket([]byte(sessionsBucketName))
-			c := b.Cursor()
-
-			for k, v := c.First(); k != nil; k, v = c.Next() {
-				chatId, err := strconv.ParseInt(string(k), 10, 64) //TODO нормальная конвертация в int64
-				if nil != err {
-					return err
-				}
-
-				session := new(UserSession)
-
-				if err = json.Unmarshal(v, &session); nil != err {
-					return err
-				}
-
-				log.Printf("key=%v value=%v\n", chatId, *session)
-
-				if session.Position == questStartLink || session.Position == questFinishLink || session.Position == questMeetingLink {
-					log.Println("Не отсылаем ничего. Пользователь на нейтральной позиции")
-					continue
-				}
-
-				realDiff := time.Since(session.UpdatedAt).Hours()
-				log.Println(realDiff)
-
-				notify, ok := config.Notifications[session.NotifyCount]
-				if ok {
-					log.Println("Есть что отправить. Проверяем прошедшее время")
-
-					needDiff, _ := strconv.ParseFloat(notify["silence_time"], 64)
-					if realDiff >= needDiff {
-						log.Println("Прошло нужное кол-во времени")
-
-						sessions.set(session.UserId, *session)
-						sessionsToUpdate = append(sessionsToUpdate, session.UserId)
-
-						notifyUser(session, notify)
-					}
-				}
-			}
-
-			return nil
-		})
-
-		if nil != err {
-			log.Println("Ошибка при выполнении крон задания", err)
-			os.Exit(1)
-		}
-
-		for _, sessionId := range sessionsToUpdate {
-			sessions.get(sessionId).increaseNotifyCount()
-		}
-	})
-
-	c.Start()
-}
-
-func notifyUser(session *UserSession, notify map[string]string) {
+func notifyUser(session *sess.UserSession, notify map[string]string) {
 	currentPosition := story[session.Position]
 	currentPosition.Monologue = []string{}
 	notifyMessages := strings.Split(notify["message"], notifySpitSymbol)
@@ -544,4 +475,32 @@ func notifyUser(session *UserSession, notify map[string]string) {
 
 func messageDelay() {
 	time.Sleep(time.Millisecond * config.Delay)
+}
+
+func enableUserNotify(crontime string) {
+	//Напоминания о забытом боте для пользователя
+	log.Println("Поставили крон", crontime)
+	c := cron.New()
+
+	c.AddFunc(crontime, func() {
+		log.Println("Запустили крон")
+		//log.Println("Количество сессий - ", len(sessions.Users))
+		//var sessionsToUpdate []int64
+		//Ищем в БД подходяще чаты для напоминалок пользователей
+
+		ignoreLinks := []string{questStartLink, questFinishLink, questMeetingLink}
+		sessionsNotify := sess.GetAllSessions(ignoreLinks, config.Notifications, notifyUser)
+
+		for _, session := range sessionsNotify.Users {
+			//notifyUser(session, notify) //TODO Как узнать нотификацию???
+			session.IncreaseNotifyCount()
+			sessions.Set(session.UserId, *session)
+		}
+
+		//for _, sessionId := range sessionsToUpdate {
+		//	sessions.Get(sessionId, questStartLink).IncreaseNotifyCount()
+		//}
+	})
+
+	c.Start()
 }
