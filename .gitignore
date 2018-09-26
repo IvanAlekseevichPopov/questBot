@@ -1,5 +1,5 @@
 # Created by .ignore support plugin (hsz.mobi)
 /config.yml
 /.idea/
-/github.com/IvanAlekseevichPopov/questBot/content/sessions.db
 /content/sessions.db
+/questBot

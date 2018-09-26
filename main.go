@@ -2,17 +2,15 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/robfig/cron"
+	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
 	"os"
+	"questBot/sess"
 	"strings"
-
 	"time"
-
-	"github.com/go-telegram-bot-api/telegram-bot-api"
-	"github.com/ivan.alekseevich.popov/questBot/sess"
-	"github.com/robfig/cron"
-	"gopkg.in/yaml.v2"
 )
 
 const questStartLink = "first"
