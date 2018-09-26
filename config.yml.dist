@@ -1,4 +1,4 @@
-bot_token: 'bot_token_here'
+bot_token: 'bot_token_here_'
 #cronjob for notify users
 cron: '0 0 * * * *'
 #delay behind bot messages
