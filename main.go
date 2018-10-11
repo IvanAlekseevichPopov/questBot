@@ -398,7 +398,7 @@ func initBot() {
 func loadConfig(fileName string) {
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env.dist file")
+		log.Fatal("Error loading .env file")
 		os.Exit(1)
 	}
 
