@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/robfig/cron"
+	"golang.org/x/net/proxy"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"questBot/sess"
 	"strings"
@@ -36,6 +39,7 @@ type storyIteration struct {
 }
 
 type appConfig struct {
+	Proxy         string                    `yaml:"proxy"`
 	BotToken      string                    `yaml:"bot_token"`
 	Cron          string                    `yaml:"cron"`
 	Notifications map[int]map[string]string `yaml:"user_notifications"`
@@ -365,7 +369,27 @@ func checkStory() {
 
 func initBot() {
 	err := error(nil)
-	bot, err = tgbotapi.NewBotAPI(config.BotToken)
+
+	client := &http.Client{}
+	if len(config.Proxy) > 0 {
+		tgProxyURL, err := url.Parse(config.Proxy)
+		if err != nil {
+			log.Panic("Failed to parse proxy URL:%s\n", err)
+			os.Exit(1)
+		}
+
+		tgDialer, err := proxy.FromURL(tgProxyURL, proxy.Direct)
+		if err != nil {
+			log.Printf("Failed to obtain proxy dialer: %s\n", err)
+			os.Exit(1)
+		}
+		tgTransport := &http.Transport{
+			Dial: tgDialer.Dial,
+		}
+		client.Transport = tgTransport
+	}
+
+	bot, err = tgbotapi.NewBotAPIWithClient(config.BotToken, client)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -494,10 +518,6 @@ func enableUserNotify(crontime string) {
 			session.IncreaseNotifyCount()
 			sessions.Set(session.UserId, *session)
 		}
-
-		//for _, sessionId := range sessionsToUpdate {
-		//	sessions.Get(sessionId, questStartLink).IncreaseNotifyCount()
-		//}
 	})
 
 	c.Start()
