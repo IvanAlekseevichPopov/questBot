@@ -1,0 +1,5 @@
+#delay behind bot messages to imitate real user
+message_delay: 1000
+user_notifications:
+  0: { silence_time: 1, message: 'Я ещё жив, а ты?'}
+  1: { silence_time: 24, message: 'Эгей! Есть кто живой?'}

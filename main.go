@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/joho/godotenv"
 	"github.com/robfig/cron"
 	"golang.org/x/net/proxy"
 	"gopkg.in/yaml.v2"
@@ -39,11 +40,10 @@ type storyIteration struct {
 }
 
 type appConfig struct {
-	Proxy         string                    `yaml:"proxy"`
-	BotToken      string                    `yaml:"bot_token"`
-	Cron          string                    `yaml:"cron"`
+	Proxy         string
+	BotToken      string
+	Cron          string
 	Notifications map[int]map[string]string `yaml:"user_notifications"`
-	Env           string                    `yaml:"env"`
 	Delay         time.Duration             `yaml:"message_delay"`
 }
 
@@ -52,7 +52,7 @@ var story map[string]storyIteration
 var config appConfig
 var sessions = sess.SessionsStruct{Users: make(map[int64]*sess.UserSession)}
 
-func init() {
+func main() {
 	loadConfig("config.yml")                     //TODO in execution parameter
 	sessions.LoadSessions("content/sessions.db") //TODO in execution parameter
 
@@ -60,9 +60,7 @@ func init() {
 	checkStory()
 
 	initBot()
-}
 
-func main() {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
@@ -374,7 +372,7 @@ func initBot() {
 	if len(config.Proxy) > 0 {
 		tgProxyURL, err := url.Parse(config.Proxy)
 		if err != nil {
-			log.Panic("Failed to parse proxy URL:%s\n", err)
+			log.Panic("Failed to parse proxy URL", err)
 			os.Exit(1)
 		}
 
@@ -398,6 +396,27 @@ func initBot() {
 }
 
 func loadConfig(fileName string) {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env.dist file")
+		os.Exit(1)
+	}
+
+	config.Cron = os.Getenv("CRON")
+	config.Proxy = os.Getenv("PROXY")
+	config.BotToken = os.Getenv("BOT_TOKEN")
+
+	if len(config.BotToken) < 10 {
+		log.Println("Config error: invalid bot token", config.BotToken)
+		os.Exit(1)
+	}
+
+	if len(config.Cron) < 4 {
+		log.Println("Config error: invalid cron", config.Cron)
+		os.Exit(1)
+	}
+
+	//TODO убрать yaml конфиг совсем
 	file, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		log.Printf("Error opening %s: #%v ", fileName, err)
@@ -431,12 +450,6 @@ func loadConfig(fileName string) {
 			os.Exit(1)
 		}
 	}
-
-	if len(config.Cron) < 4 {
-		log.Println("Config error: invalid cron", config.Cron)
-		os.Exit(1)
-	}
-
 	if 0 == config.Delay || config.Delay > 10000 {
 		log.Println("Config error: invalid delay", config.Delay)
 		os.Exit(1)
