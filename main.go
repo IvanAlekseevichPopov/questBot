@@ -44,7 +44,7 @@ type appConfig struct {
 	BotToken      string
 	Cron          string
 	Notifications map[int]map[string]string `yaml:"user_notifications"`
-	Delay         time.Duration             `yaml:"message_delay"`
+	Delay         time.Duration
 }
 
 var bot *tgbotapi.BotAPI
@@ -405,6 +405,7 @@ func loadConfig(fileName string) {
 	config.Cron = os.Getenv("CRON")
 	config.Proxy = os.Getenv("PROXY")
 	config.BotToken = os.Getenv("BOT_TOKEN")
+	config.Delay, _ = time.ParseDuration(os.Getenv("DELAY"))
 
 	if len(config.BotToken) < 10 {
 		log.Println("Config error: invalid bot token", config.BotToken)
@@ -413,6 +414,11 @@ func loadConfig(fileName string) {
 
 	if len(config.Cron) < 4 {
 		log.Println("Config error: invalid cron", config.Cron)
+		os.Exit(1)
+	}
+
+	if 0 == config.Delay.Nanoseconds() || config.Delay.Seconds() > 5 {
+		log.Println("Config error: invalid delay", config.Delay.String())
 		os.Exit(1)
 	}
 
@@ -449,10 +455,6 @@ func loadConfig(fileName string) {
 			log.Println("Config error: invalid message", taskId)
 			os.Exit(1)
 		}
-	}
-	if 0 == config.Delay || config.Delay > 10000 {
-		log.Println("Config error: invalid delay", config.Delay)
-		os.Exit(1)
 	}
 }
 
@@ -509,7 +511,7 @@ func notifyUser(session *sess.UserSession, notify map[string]string) {
 }
 
 func messageDelay() {
-	time.Sleep(time.Millisecond * config.Delay)
+	time.Sleep(config.Delay)
 }
 
 func enableUserNotify(crontime string) {
