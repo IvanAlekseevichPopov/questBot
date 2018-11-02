@@ -7,3 +7,6 @@ Telegram bot for interactive quest game
  1. copy file `.env.dist` to `.env` and change it for you needs
  2. execute `go get` to pull vendors
  3. execute `go run` to start bot
+ 
+ ### Testing
+ just run `go test -v`
